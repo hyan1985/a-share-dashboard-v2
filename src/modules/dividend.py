@@ -256,13 +256,16 @@ class DividendModule(BaseModule):
                     streak = int(div_kit.streak(sub) or 0)
                     info = div_kit.payout_summary(sub, ctx.trade_date) or {}
                     # payout_summary 不返回派息率，自己算：每股分红 ÷ EPS
-                    dps_latest = info.get("latest_annual_dps")
+                    # 派息率必须同年对齐：EPS 用哪一年的年报，
+                    # 每股分红就取哪一年，否则两边错一年，数会差一倍。
+                    fin_year = int(str(row.get("end_date") or "")[:4] or 0)
+                    dps_latest = (div_kit.dps_for_year(sub, fin_year)
+                                  if fin_year else None)
                     if dps_latest and eps and eps > 0:
                         payout = float(dps_latest) / float(eps)
-            # 派息率暂时只提示、不硬筛。原因是 latest_annual_dps 取到的
-            # 每股分红和 EPS 不是同一年：招商银行实际派息率 35%，
-            # 这里算出来 17.6%（dps 取到 1.00，实际 2.00）。
-            # 在年月对齐修好之前，硬筛会误伤半个银行板块。
+            # 派息率：>100% 说明在吃老本，<20% 说明分红意愿弱
+            if payout is not None and not (cfg["payout_min"] <= payout <= cfg["payout_max"]):
+                continue
             stats["dividend"] += 1
 
             # 均线定位
