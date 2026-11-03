@@ -8,7 +8,8 @@
 """
 from __future__ import annotations
 
-from typing import Dict, Optional
+import re
+from typing import Dict, List, Optional
 
 import pandas as pd
 
@@ -36,8 +37,39 @@ def load_lexicon(path=None) -> dict:
     merged = dict(_DEFAULT_LEXICON)
     for key, value in (data or {}).items():
         if isinstance(value, list):
-            merged[key] = [str(v) for v in value]
+            # bearish_regex 是 [{tag, pattern}] 字典，不能 str()，
+            # 否则正则全部失效——注意这个坑，转成字符串后匹配永远为 0。
+            merged[key] = [v if isinstance(v, dict) else str(v) for v in value]
     return merged
+
+
+_NEWS_HINT = re.compile(r"每经|快讯|公告|研报|证券时报|财联社|新华社|记者")
+
+
+def _regex_hits(text: str, patterns: List[dict]) -> int:
+    """反讽/阴阳语气正则命中的次数。
+
+    词典只能抓词，「牛回速归」「感谢主力」「牛市+哈哈哈」这类反讽
+    必须靠组合正则——它们字面上全是看多词，被词库算成多头会把方向搞反。
+    """
+    if not patterns:
+        return 0
+    hits = 0
+    is_news = bool(_NEWS_HINT.search(text))
+    for item in patterns:
+        if not isinstance(item, dict):
+            continue
+        pat = item.get("pattern")
+        if not pat:
+            continue
+        if item.get("skip_if_news") and is_news:
+            continue
+        try:
+            if re.search(pat, text):
+                hits += 1
+        except re.error:
+            continue
+    return hits
 
 
 def _has_negation(text: str, index: int, negations) -> bool:
@@ -98,6 +130,9 @@ def score_title(title: str, lexicon: dict) -> int:
                 bear += 1
             start = index + len(word)
 
+    # 反讽权重 ×2：这类句子字面上全是看多词（牛市、利好、抄底），
+    # 只扣 1 分压不住，方向还是会翻。
+    bear += 2 * _regex_hits(text, lexicon.get("bearish_regex") or [])
     return bull - bear
 
 
