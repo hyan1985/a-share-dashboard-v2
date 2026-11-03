@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     # 全市场约 5500 次逐股请求，可能跑一小时以上。
     # 每个股票有 120 天 TTL，超时后重跑会从断点继续（已缓存的直接跳过）。
-    timeout-minutes: 180
+    timeout-minutes: 350
     steps:
       - uses: actions/checkout@v5
 
@@ -30,4 +30,6 @@ jobs:
       - name: 全市场拉一遍分红历史
         env:
           TUSHARE_TOKEN: ${{ secrets.TUSHARE_TOKEN }}
+          # 全量 5000+ 次逐股请求，限频会更频繁，重试次数放宽
+          TUSHARE_RETRIES: "8"
         run: python -m src.cli fetch --with-dividend --dividend-all
