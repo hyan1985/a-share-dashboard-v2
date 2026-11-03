@@ -22,7 +22,7 @@ dividend:
   roe_min_streak: 2
   debt_max: 0.65
   cash_ratio_min: 1.0
-  payout_min: 0.3
+  payout_min: 0.0
   payout_max: 1.0
   ma_long: 120
   ma_short: 60
@@ -41,8 +41,8 @@ bank:
   yield_min: 0.04
   pe_max: 8.0
   roe_min: 0.08
-  payout_min: 0.2
-  payout_max: 0.7
+  payout_min: 0.0
+  payout_max: 1.0
   dividend_years_min: 5
   ma_long: 120
   buy_ratio: 0.88
