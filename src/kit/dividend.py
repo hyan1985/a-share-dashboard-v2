@@ -73,6 +73,23 @@ def latest_annual_dps(df: pd.DataFrame) -> Optional[float]:
     return float(part["_cash"].sum())
 
 
+def dps_for_year(df: pd.DataFrame, year: int) -> Optional[float]:
+    """指定财年的每股派现（只算年报 1231 的实施记录）。
+
+    为什么需要它：原来用 latest_annual_dps（最近一个实施年度）去除以
+    fina_indicator 最新一期的 EPS，两个年份经常对不上——招商银行
+    EPS 取 2025 年，分红只到 2024 年，派息率算出 17.6%（真实 35%）。
+    """
+    rows = implemented(df)
+    if rows.empty:
+        return None
+    part = rows[(rows["_year"] == int(year))
+                & (rows["end_date"].astype(str).str[4:8] == "1231")]
+    if part.empty:
+        return None
+    return float(part["_cash"].sum())
+
+
 def trailing_dps(df: pd.DataFrame) -> Optional[float]:
     """滚动 12 个月每股派现（含中期分红），用来和行情的 dv_ttm 对齐。
 
