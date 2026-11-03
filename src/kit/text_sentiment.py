@@ -140,8 +140,54 @@ def is_spam(title: str, lexicon: dict) -> bool:
     return any(word and word in title for word in lexicon.get("spam_keywords", []))
 
 
+HALF_LIFE_HOURS = 12.0      # 帖子热度半衰期：12 小时前的帖子权重减半
+
+
+def _post_weights(posts: pd.DataFrame) -> Optional[pd.Series]:
+    """每条帖子的权重 = (阅读数 + 1) × 同作者重复惩罚 × 时间衰减。
+
+    为什么不按帖子数平均：一条 5000 阅读的帖子和一条 3 阅读的帖子
+    信息量差几个数量级。按条数平均等于让水军刷屏决定情绪。
+    时间衰减同理——昨天上午的情绪不该和收盘时同等权重。
+    数据缺列时返回 None，退化成等权。
+    """
+    n = len(posts)
+    if n == 0:
+        return None
+    # 两个仓库的列名不同：MarketMonitoring 用 read_count/author/time，
+    # 本仓库的股吧表用 clicks/user/publish_time。都认。
+    read_col = next((c for c in ("read_count", "clicks", "read") if c in posts.columns), None)
+    if read_col is None:
+        return None
+    read = pd.to_numeric(posts[read_col], errors="coerce").fillna(0).clip(lower=0)
+    weight = read + 1.0
+
+    # 同一作者大量发帖时降权：第 2 条 ×0.5、第 3 条 ×0.25 …
+    author_col = next((c for c in ("author", "user") if c in posts.columns), None)
+    if author_col:
+        author = posts[author_col].astype(str)
+        order = author.groupby(author).cumcount()
+        weight = weight * (0.5 ** order)
+
+    # 时间衰减
+    ts = None
+    if "publish_time" in posts.columns:
+        ts = pd.to_datetime(posts["publish_time"].astype(str), errors="coerce")
+    elif "time" in posts.columns and "date" in posts.columns:
+        ts = pd.to_datetime(posts["date"].astype(str) + " " + posts["time"].astype(str),
+                            errors="coerce")
+    if ts is not None:
+        try:
+            if ts.notna().any():
+                delta_h = (ts.max() - ts).dt.total_seconds() / 3600.0
+                weight = weight * (0.5 ** (delta_h / HALF_LIFE_HOURS))
+        except Exception:
+            pass
+    return weight
+
+
 def analyze(posts: pd.DataFrame, lexicon: Optional[dict] = None,
-            title_col: str = "title") -> dict:
+            title_col: str = "title", weighted: bool = True) -> dict:
     """汇总一批帖子的情绪。
 
     返回 sentiment ∈ [-1, 1]，以及多空帖数与覆盖率。
@@ -155,20 +201,24 @@ def analyze(posts: pd.DataFrame, lexicon: Optional[dict] = None,
     if posts is None or posts.empty or title_col not in posts.columns:
         return empty
 
-    bull_hits = bear_hits = 0
+    weights = _post_weights(posts) if weighted else None
+    w_iter = weights.tolist() if weights is not None else [1.0] * len(posts)
+
+    bull_hits = bear_hits = 0.0
     bull_posts = bear_posts = neutral = spam = 0
 
-    for title in posts[title_col].astype(str):
+    for i, title in enumerate(posts[title_col].astype(str)):
         if is_spam(title, lexicon):
             spam += 1
             continue
         net = score_title(title, lexicon)
+        w = float(w_iter[i]) if i < len(w_iter) else 1.0
         if net > 0:
             bull_posts += 1
-            bull_hits += net
+            bull_hits += net * w
         elif net < 0:
             bear_posts += 1
-            bear_hits += -net
+            bear_hits += -net * w
         else:
             neutral += 1
 
@@ -185,6 +235,7 @@ def analyze(posts: pd.DataFrame, lexicon: Optional[dict] = None,
         "bear_posts": int(bear_posts),
         "neutral_posts": int(neutral),
         "spam_posts": int(spam),
-        "bull_hits": int(bull_hits),
-        "bear_hits": int(bear_hits),
+        "bull_hits": round(bull_hits, 1),
+        "bear_hits": round(bear_hits, 1),
+        "weighted": bool(weights is not None),
     }
