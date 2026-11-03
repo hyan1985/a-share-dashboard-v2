@@ -29,19 +29,34 @@ jobs:
       - name: 安装依赖
         run: pip install -r requirements.txt
 
-      - name: 首次回填数据（缓存未命中时）
+      # 数据目录约 30MB/年，缓存住之后每次只拉增量，冷启动只付一次
+      - name: 恢复数据缓存
+        uses: actions/cache@v4
+        with:
+          path: data
+          key: ashare-data-${{ github.run_id }}
+          restore-keys: ashare-data-
+
+      - name: 增量更新（已缓存数据时）
+        if: hashFiles('data/.watermark.json') != ''
+        env:
+          TUSHARE_TOKEN: ${{ secrets.TUSHARE_TOKEN }}
+        run: python -m src.cli fetch
+
+      # 冷启动：分表回填。fetch() 每次都会顺带跑财务/分红/股吧，
+      # 所以只调一次日线（200 天），其余表 40 天足够。
+      # 注意 --backfill 的单位是「年」，回填自然日必须用 --backfill-days。
+      - name: 冷启动回填
+        if: hashFiles('data/.watermark.json') == ''
         env:
           TUSHARE_TOKEN: ${{ secrets.TUSHARE_TOKEN }}
         run: |
-          if [ -f data/.watermark.json ]; then
-            echo "已有数据，增量更新"
-            python -m src.cli fetch
-          else
-            # 注意：--backfill 的单位是「年」，回填自然日要用 --backfill-days。
-            # 首次写错过一次，--backfill 200 等于 200 年，跑了 40 分钟还在拉。
-            echo "首次运行，回填 260 个自然日（约 175 个交易日，够算 MA120）"
-            python -m src.cli fetch --backfill-days 260
-          fi
+          echo "冷启动：日线回填 200 个自然日（够算 MA120）"
+          python -m src.cli fetch --backfill-days 200 --table daily
+          echo "其余表回填 40 个自然日"
+          python -m src.cli fetch --backfill-days 40 --table daily_basic
+          python -m src.cli fetch --backfill-days 40 --table index_daily
+          python -m src.cli fetch --backfill-days 40 --table limit_list_d
 
       - name: 生成看板
         run: python -m src.cli run
