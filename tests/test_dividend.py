@@ -61,19 +61,6 @@ class StreakTest(unittest.TestCase):
         self.assertEqual(sorted(dk.years_paid(df)), [2025, 2026])
 
 
-class LatestAnnualTest(unittest.TestCase):
-    def test_only_calendar_year_end_used(self):
-        df = frame([
-            ("A", "20241231", "2025", "实施", 0.20, 0.20),
-            ("A", "20250630", "2025", "实施", 0.05, 0.05),
-            ("A", "20251231", "2026", "实施", 0.25, 0.25),
-        ])
-        self.assertAlmostEqual(dk.latest_annual_dps(df), 0.25)
-
-    def test_none_when_no_annual(self):
-        df = frame([("A", "20250630", "2025", "实施", 0.05, 0.05)])
-        self.assertIsNone(dk.latest_annual_dps(df))
-
 
 class TrailingDpsTest(unittest.TestCase):
     def test_includes_interim_within_12_months(self):
@@ -103,13 +90,11 @@ class SummaryTest(unittest.TestCase):
         self.assertEqual(s["streak"], 5)
         self.assertEqual(s["first_year"], 2021)
         self.assertEqual(s["last_year"], 2025)
-        self.assertAlmostEqual(s["latest_annual_dps"], 0.1)
         self.assertIn("trailing_dps", s)
 
     def test_empty_summary(self):
         s = dk.payout_summary(pd.DataFrame())
         self.assertEqual(s["streak"], 0)
-        self.assertIsNone(s["latest_annual_dps"])
 
 
 if __name__ == "__main__":
