@@ -1,6 +1,7 @@
 pandas>=1.5,<3
 numpy>=1.21,<3
 pyarrow>=10.0,<20
+pyyaml>=6.0,<7
 six>=1.16,<2
 tushare>=1.4.29,<1.5
 requests>=2.31,<3
