@@ -388,7 +388,12 @@ def fetch(client, store: ParquetStore, target: Optional[str] = None,
 
     if verbose:
         print(f"  目标交易日: {target_date}")
-        print(f"  待检查日期: {selected[0]} ~ {selected[-1]}（{len(selected)} 个）")
+        # 空列表是正常情况：增量模式下如果所有表都已最新，就没有要拉的日期。
+        # 原来无条件取 selected[0] 会 IndexError。
+        if selected:
+            print(f"  待检查日期: {selected[0]} ~ {selected[-1]}（{len(selected)} 个）")
+        else:
+            print("  待检查日期: 无（各表都已是最新）")
         print(f"  数据表: {', '.join(s.name for s in specs)}")
 
     results: Dict[str, FetchResult] = {}
