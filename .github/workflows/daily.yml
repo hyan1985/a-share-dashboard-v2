@@ -18,6 +18,7 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v5
 
@@ -36,8 +37,10 @@ jobs:
             echo "已有数据，增量更新"
             python -m src.cli fetch
           else
-            echo "首次运行，回填 200 个交易日"
-            python -m src.cli fetch --backfill 200
+            # 注意：--backfill 的单位是「年」，回填自然日要用 --backfill-days。
+            # 首次写错过一次，--backfill 200 等于 200 年，跑了 40 分钟还在拉。
+            echo "首次运行，回填 260 个自然日（约 175 个交易日，够算 MA120）"
+            python -m src.cli fetch --backfill-days 260
           fi
 
       - name: 生成看板
