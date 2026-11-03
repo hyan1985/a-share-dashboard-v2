@@ -60,6 +60,7 @@ def cmd_fetch(args) -> int:
         backfill_years=args.backfill,
         tables=args.table or None,
         all_tables=args.all_tables,
+        with_dividend=getattr(args, "with_dividend", False),
     )
     print("└ 完成")
     print(fetcher.summarize(results))
@@ -264,6 +265,8 @@ def build_parser() -> argparse.ArgumentParser:
     p_fetch.add_argument("--backfill-days", type=int, default=0, metavar="DAYS",
                          help="回补 N 个自然日")
     p_fetch.add_argument("--table", action="append", help="只拉指定表（可多次）")
+    p_fetch.add_argument("--with-dividend", action="store_true",
+                         help="同时更新分红历史缓存（逐股接口，较慢，建议每周一次）")
     p_fetch.add_argument("--all-tables", action="store_true",
                          help="拉取全部已定义的表（默认只拉看板用到的 4 张）")
     p_fetch.add_argument("--lite", action="store_true",
