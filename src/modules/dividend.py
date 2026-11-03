@@ -220,7 +220,10 @@ class DividendModule(BaseModule):
             roe = fin_kit.norm_ratio(row.get("roe"))
             debt = fin_kit.norm_ratio(row.get("debt_to_assets"))
             ocfps = fin_kit.norm_ratio(row.get("ocfps"))
-            eps = fin_kit.norm_ratio(row.get("eps"))
+            # EPS 是绝对数值（元/股），不能过 norm_ratio——
+            # 那个函数会把 >1 的值当百分数除以 100，招商银行 5.6 元/股
+            # 会变成 0.056，派息率算出来 1760%。这个坑很隐蔽。
+            eps = pd.to_numeric(row.get("eps"), errors="coerce")
 
             if gm is not None and gm < cfg["gross_margin_min"]:
                 continue
@@ -256,8 +259,10 @@ class DividendModule(BaseModule):
                     dps_latest = info.get("latest_annual_dps")
                     if dps_latest and eps and eps > 0:
                         payout = float(dps_latest) / float(eps)
-            if payout is not None and not (cfg["payout_min"] <= payout <= cfg["payout_max"]):
-                continue
+            # 派息率暂时只提示、不硬筛。原因是 latest_annual_dps 取到的
+            # 每股分红和 EPS 不是同一年：招商银行实际派息率 35%，
+            # 这里算出来 17.6%（dps 取到 1.00，实际 2.00）。
+            # 在年月对齐修好之前，硬筛会误伤半个银行板块。
             stats["dividend"] += 1
 
             # 均线定位
