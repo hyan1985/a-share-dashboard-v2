@@ -62,6 +62,8 @@ REFERENCE_TABLES = ("stock_basic",)
 FINANCIAL_TABLE = "fina_indicator"
 DIVIDEND_TABLE = "dividend"      # 以 ts_code 为分区键（不是日期）
 GUBA_TABLE = "guba"              # 股吧帖子，按交易日分区
+GAP_SCAN_DAYS = 30                       # 增量时只补最近一个月的缺口
+
 FINANCIAL_API = "fina_indicator_vip"     # 按报告期一次拉全市场，需 5000 积分
 
 
@@ -335,6 +337,8 @@ def fetch(client, store: ParquetStore, target: Optional[str] = None,
           backfill_days: int = 0, backfill_years: int = 0,
           tables: Optional[Sequence[str]] = None,
           all_tables: bool = False,
+          with_dividend: bool = False,
+          dividend_limit: int = 400,
           verbose: bool = True) -> Dict[str, FetchResult]:
     """增量拉取。backfill_* 指定回补范围。"""
     calendar.ensure_trade_cal(client, store, start_year=2008, force=False)
@@ -357,24 +361,29 @@ def fetch(client, store: ParquetStore, target: Optional[str] = None,
     else:
         specs = [TABLE_MAP[t] for t in DEFAULT_TABLES]
 
+    # 每张表各自算要拉哪些日期。原来的写法有两个坑：
+    #   1) floor = min(watermarks)：只要有一张表水位线旧，所有表都从头重拉；
+    #   2) 缺口扫描扫 750 个交易日，而 limit_list_d 在 2016-2019 返回 0 行是
+    #      正常的，这些日期永远"缺失"、每次都被重试——增量跑成了全量。
+    selected_by_spec: Dict[str, List[str]] = {}
     if backfill_years or backfill_days:
+        for spec in specs:
+            selected_by_spec[spec.name] = list(dates)
         selected = dates
     else:
-        # 增量：只看本次要拉的表的水位线
-        watermarks = [store.get_watermark(s.name) for s in specs]
-        known = [w for w in watermarks if w]
-        floor = min(known) if known else (dates[-5] if dates else target_date)
-        selected = [d for d in dates if d > floor] or [target_date]
-
-        # 补历史缺口：水位线只保证「之后的新日期」，之前因限频/网络失败的
-        # 日期会永远被跳过。在最近 750 个交易日内做一次缺口扫描。
-        window = dates[-750:]
+        gap_window = dates[-GAP_SCAN_DAYS:]        # 只补最近一个月的缺口
         for spec in specs:
+            wm = store.get_watermark(spec.name)
+            after = [d for d in dates if wm is None or d > wm]
             existing = set(store.list_dates(spec.name))
-            missing = [d for d in window if d not in existing]
-            if missing:
-                selected.extend(missing)
-        selected = sorted(set(selected))
+            gaps = [d for d in gap_window if d not in existing]
+            spec_dates = sorted(set(after) | set(gaps))
+            # 已经入库的跳过，免得把「水位线之后全部重算」变成全量
+            spec_dates = [d for d in spec_dates if d not in existing] or (
+                [target_date] if target_date not in existing else [])
+            selected_by_spec[spec.name] = spec_dates
+        all_dates = sorted({d for v in selected_by_spec.values() for d in v})
+        selected = all_dates
 
     if verbose:
         print(f"  目标交易日: {target_date}")
@@ -385,7 +394,11 @@ def fetch(client, store: ParquetStore, target: Optional[str] = None,
     for spec in specs:
         if verbose:
             print(f"  → {spec.label or spec.name} ({spec.api})")
-        results[spec.name] = fetch_table(client, store, spec, selected, verbose=verbose)
+        spec_dates = selected_by_spec.get(spec.name, selected)
+        if not spec_dates:
+            results[spec.name] = FetchResult(table=spec.name)
+            continue
+        results[spec.name] = fetch_table(client, store, spec, spec_dates, verbose=verbose)
 
     if verbose:
         print("  → 财务指标（按年报，一次一报告期）")
@@ -401,7 +414,13 @@ def fetch(client, store: ParquetStore, target: Optional[str] = None,
     except Exception as exc:  # noqa: BLE001
         if verbose:
             print(f"  ✗ 现金流/利润表拉取失败：{exc}")
-    fetch_dividend_history(client, store, target_date, verbose=verbose)
+    # 分红是逐股接口（一只一次请求），全市场跑一遍要好几分钟。
+    # 它只需要每周更新一次，所以默认跳过，由 --with-dividend 触发。
+    if with_dividend:
+        fetch_dividend_history(client, store, target_date,
+                               limit=dividend_limit, verbose=verbose)
+    elif verbose:
+        print("  - 分红历史：跳过（每周单独更新，加 --with-dividend）")
 
     if verbose:
         print("  → 股吧情绪（公开列表页）")
