@@ -131,20 +131,19 @@ class BankModule(BaseModule):
                 sub = div_tbl[div_tbl.ts_code == code]
                 if not sub.empty:
                     streak = int(div_kit.streak(sub) or 0)
-                    info = div_kit.payout_summary(sub, ctx.trade_date) or {}
-                    dps = info.get("latest_annual_dps")
-                    # EPS 是绝对数值（元/股），不能过 norm_ratio——
-                    # 那个函数会把 >1 的值当百分数除以 100。
+                    # 派息率必须同年对齐（见 kit/dividend.py 的说明）
                     eps = pd.to_numeric(row.get("eps"), errors="coerce")
+                    fin_year = int(str(row.get("end_date") or "")[:4] or 0)
+                    dps = (div_kit.dps_for_year(sub, fin_year)
+                           if fin_year else None)
                     if dps and eps and eps > 0:
                         payout = float(dps) / float(eps)
 
             if streak and streak < cfg["dividend_years_min"]:
                 continue
-            # 派息率暂时只提示、不硬筛。原因是 latest_annual_dps 取到的
-            # 每股分红和 EPS 不是同一年：招商银行实际派息率 35%，
-            # 这里算出来 17.6%（dps 取到 1.00，实际 2.00）。
-            # 在年月对齐修好之前，硬筛会误伤半个银行板块。
+            # 派息率：>100% 说明在吃老本，<20% 说明分红意愿弱
+            if payout is not None and not (cfg["payout_min"] <= payout <= cfg["payout_max"]):
+                continue
 
             zone, badge = "无数据", "hold"
             price = price_adj = ma_display = None
