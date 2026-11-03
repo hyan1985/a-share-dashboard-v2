@@ -1,0 +1,40 @@
+name: 每周更新分红缓存
+
+on:
+  schedule:
+    # A 股分红绝大多数在年报（4~6 月）和半年报（8~10 月）之后实施，
+    # 平时几乎不变，所以：
+    #   5 月和 9 月：每周日跑一次（披露高峰期）
+    #   其他月份：每月 1 日跑一次
+    - cron: "0 0 * 5,9 0"
+    - cron: "0 0 1 * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  dividend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - run: pip install -r requirements.txt
+
+      - uses: actions/cache@v4
+        with:
+          path: data
+          key: ashare-data-${{ github.run_id }}
+          restore-keys: ashare-data-
+
+      # 分红是逐股接口，一只一次请求，全市场要几分钟。
+      # 放在每周单独跑，日常的每日任务不需要它。
+      - name: 更新分红历史
+        env:
+          TUSHARE_TOKEN: ${{ secrets.TUSHARE_TOKEN }}
+        run: python -m src.cli fetch --with-dividend
