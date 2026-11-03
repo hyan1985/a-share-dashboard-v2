@@ -60,25 +60,12 @@ def streak(df: pd.DataFrame) -> int:
     return count
 
 
-def latest_annual_dps(df: pd.DataFrame) -> Optional[float]:
-    """最近一个完整年度（1231）的每股派现。"""
-    rows = implemented(df)
-    if rows.empty:
-        return None
-    annual = rows[rows["end_date"].astype(str).str[4:8] == "1231"]
-    if annual.empty:
-        return None
-    last_year = annual["_year"].max()
-    part = annual[annual["_year"] == last_year]
-    return float(part["_cash"].sum())
-
-
 def dps_for_year(df: pd.DataFrame, year: int) -> Optional[float]:
     """指定财年的每股派现（只算年报 1231 的实施记录）。
 
-    为什么需要它：原来用 latest_annual_dps（最近一个实施年度）去除以
-    fina_indicator 最新一期的 EPS，两个年份经常对不上——招商银行
-    EPS 取 2025 年，分红只到 2024 年，派息率算出 17.6%（真实 35%）。
+    为什么需要它：早先的实现是「取最近一个实施年度的每股派现 ÷ 最新一期
+    EPS」，两个年份经常对不上——招商银行 EPS 取 2025 年，分红只到 2024 年，
+    派息率算出 17.6%（真实 35%）。那个实现已经删掉，只保留按年取数。
     """
     rows = implemented(df)
     if rows.empty:
@@ -119,13 +106,12 @@ def payout_summary(df: pd.DataFrame, as_of: str = None) -> dict:
     df = filter_as_of(df, as_of)
     rows = implemented(df)
     if rows.empty:
-        return {"years": [], "streak": 0, "latest_annual_dps": None,
+        return {"years": [], "streak": 0,
                 "trailing_dps": None, "first_year": None, "last_year": None}
     years = years_paid(df)
     return {
         "years": years,
         "streak": streak(df),
-        "latest_annual_dps": latest_annual_dps(df),
         "trailing_dps": trailing_dps(df),
         "first_year": min(years),
         "last_year": max(years),
