@@ -254,8 +254,6 @@ class DividendModule(BaseModule):
                 sub = div_tbl[div_tbl.ts_code == code]
                 if not sub.empty:
                     streak = int(div_kit.streak(sub) or 0)
-                    info = div_kit.payout_summary(sub, ctx.trade_date) or {}
-                    # payout_summary 不返回派息率，自己算：每股分红 ÷ EPS
                     # 派息率必须同年对齐：EPS 用哪一年的年报，
                     # 每股分红就取哪一年，否则两边错一年，数会差一倍。
                     fin_year = int(str(row.get("end_date") or "")[:4] or 0)
