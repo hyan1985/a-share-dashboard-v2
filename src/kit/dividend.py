@@ -70,8 +70,10 @@ def dps_for_year(df: pd.DataFrame, year: int) -> Optional[float]:
     rows = implemented(df)
     if rows.empty:
         return None
-    part = rows[(rows["_year"] == int(year))
-                & (rows["end_date"].astype(str).str[4:8] == "1231")]
+    # 同一财年可能派两次（中期 0630 + 年度 1231），必须都算上。
+    # 只取 1231 会漏掉中期分红，派息率会算成实际的一半——
+    # 招商银行就是这样算出 17.6%（真实 35%）的。
+    part = rows[rows["_year"] == int(year)]
     if part.empty:
         return None
     return float(part["_cash"].sum())
