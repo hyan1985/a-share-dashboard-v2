@@ -40,8 +40,8 @@ DEFAULTS = {
     "yield_min": 0.04,
     "pe_max": 8.0,
     "roe_min": 0.08,
-    "payout_min": 0.20,
-    "payout_max": 0.70,
+    "payout_min": 0.0,
+    "payout_max": 1.00,
     "dividend_years_min": 5,
     "ma_long": 120,
     "buy_ratio": 0.88,
@@ -141,8 +141,10 @@ class BankModule(BaseModule):
 
             if streak and streak < cfg["dividend_years_min"]:
                 continue
-            # 派息率：>100% 说明在吃老本，<20% 说明分红意愿弱
-            if payout is not None and not (cfg["payout_min"] <= payout <= cfg["payout_max"]):
+            # 派息率只挡 >100%（文章原文的「警惕线」：在吃老本不可持续）。
+            # 70~100% 不加硬筛——高派息率是「现金奶牛」的特征，正是要找的。
+            # 30~70% 之外给提示，不改判。
+            if payout is not None and payout > cfg["payout_max"]:
                 continue
 
             zone, badge = "无数据", "hold"
