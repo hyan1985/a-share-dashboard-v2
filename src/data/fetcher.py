@@ -166,6 +166,48 @@ def fetch_financials(client, store: ParquetStore, trade_date_compact: str,
             "periods": len(periods)}
 
 
+
+CASHFLOW_API = "cashflow_vip"
+INCOME_API = "income_vip"
+
+
+def fetch_cashflow_income(client, store: ParquetStore, trade_date_compact: str,
+                          years: int = 2, verbose: bool = True) -> Dict[str, int]:
+    """拉现金流量表和利润表（年报），用于算「收现比」。
+
+    收现比 = 销售商品收到的现金 ÷ 营业收入。fina_indicator 里没有
+    销售商品收到的现金，必须单独拉 cashflow；营业收入在 income 里。
+
+    只拉最近几年：筛选用的是最新一期，历史用来看趋势。
+    """
+    periods = annual_periods(int(trade_date_compact[:4]), years)
+    out = {"cashflow": 0, "income": 0, "skipped": 0, "failed": 0}
+    for period in periods:
+        for table, api, fields in (
+            ("cashflow", CASHFLOW_API,
+             "ts_code,end_date,c_fr_sale_sg,n_cashflow_act"),
+            ("income", INCOME_API, "ts_code,end_date,revenue,total_revenue"),
+        ):
+            if store.has_dated(table, period):
+                out["skipped"] += 1
+                continue
+            try:
+                df = client.query(api, period=period, fields=fields)
+            except Exception as exc:  # noqa: BLE001
+                out["failed"] += 1
+                if verbose:
+                    print(f"    ✗ {table} {period}: {exc}")
+                continue
+            if df is None or df.empty:
+                out["failed"] += 1
+                continue
+            store.write_dated(table, period, df)
+            out[table] += 1
+            if verbose:
+                print(f"  → {table} {period}: {len(df)} 行")
+    return out
+
+
 def fetch_reference(client, store: ParquetStore, verbose: bool = True) -> None:
     """拉取无日期维度的参考表（股票列表等）。"""
     if store.read_single("stock_basic").empty:
@@ -349,6 +391,11 @@ def fetch(client, store: ParquetStore, target: Optional[str] = None,
 
     if verbose:
         print("  → 分红历史（按需缓存，只取高股息标的）")
+    try:
+        fetch_cashflow_income(client, store, target_date, verbose=verbose)
+    except Exception as exc:  # noqa: BLE001
+        if verbose:
+            print(f"  ✗ 现金流/利润表拉取失败：{exc}")
     fetch_dividend_history(client, store, target_date, verbose=verbose)
 
     if verbose:

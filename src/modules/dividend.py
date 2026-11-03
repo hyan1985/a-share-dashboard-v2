@@ -91,9 +91,17 @@ class DividendModule(BaseModule):
         需要 cashflow 与 income 两张表。缺表时返回空 dict，
         候选里会标注「收现比未校验」，而不是默认通过。
         """
+        # 这两张表按报告期存（20251231 这样的目录），不是单文件，
+        # 也不是按交易日。取最近一期即可。
+        def _latest(table: str):
+            dates = ctx.store.list_dates(table)
+            if not dates:
+                return None
+            return ctx.store.read_dated(table, [dates[-1]])
+
         try:
-            cf = ctx.store.read_single("cashflow")
-            inc = ctx.store.read_single("income")
+            cf = _latest("cashflow")
+            inc = _latest("income")
         except Exception:
             return {}
         if cf is None or inc is None or cf.empty or inc.empty:
@@ -126,9 +134,28 @@ class DividendModule(BaseModule):
 
         latest = fin_kit.latest_row(fin)
         roe_wide = fin_kit.pivot(fin, "roe")
+        # 文章要求「连续 5 年 ROE > 15%」，不是只看最新一期。
+        # 手头只加载了 3 期年报，所以按近 3 年连续达标算，并在候选里给出实际年数。
+        def _roe_streak(code: str) -> int:
+            if code not in roe_wide.index:
+                return 0
+            vals = [fin_kit.norm_ratio(v) for v in roe_wide.loc[code].dropna().values]
+            vals = [v for v in vals if v is not None]
+            cnt = 0
+            for v in reversed(vals):
+                if v >= cfg["roe_min"]:
+                    cnt += 1
+                else:
+                    break
+            return cnt
         cash_ratio = self._cash_ratio(ctx)
 
-        div_tbl = ctx.store.read_single("dividend")
+        # 分红表以 ts_code 为分区键（一只股票一个文件），不是单文件表。
+        # 用 read_dated 不传日期 = 读全部已缓存的分红记录。
+        try:
+            div_tbl = ctx.store.read_dated("dividend")
+        except Exception:
+            div_tbl = None
 
         rows: List[Candidate] = []
         stats = {"total": 0, "pe": 0, "yield": 0, "gross": 0, "roe": 0,
@@ -152,7 +179,12 @@ class DividendModule(BaseModule):
 
             if code not in latest.index:
                 continue
-            row = latest.loc[code]
+            row = latest.loc[code].copy()
+            # 财务表里没有名称和行业，从 stock_basic 补——不补的话
+            # 金融股豁免（银行不看负债率和收现比）就永远不生效。
+            if code in meta.index:
+                row["name"] = meta.loc[code].get("name", "")
+                row["industry"] = meta.loc[code].get("industry", "")
             gm = fin_kit.norm_ratio(row.get("grossprofit_margin"))
             roe = fin_kit.norm_ratio(row.get("roe"))
             debt = fin_kit.norm_ratio(row.get("debt_to_assets"))
@@ -164,15 +196,20 @@ class DividendModule(BaseModule):
             stats["gross"] += 1
             if roe is None or roe < cfg["roe_min"]:
                 continue
+            roe_streak = _roe_streak(code)
+            if roe_streak < 2:
+                continue
             stats["roe"] += 1
-            if debt is not None and debt > cfg["debt_max"]:
+            is_fin = uni.is_financial(row.get("industry"))
+            if not is_fin and debt is not None and debt > cfg["debt_max"]:
                 continue
             stats["debt"] += 1
             if ocfps is not None and eps and eps > 0 and ocfps < eps:
                 continue
             stats["cash"] += 1
 
-            cr = cash_ratio.get(code)
+            # 收现比对银行/保险不适用（作者本人也在评论区强调了这点）
+            cr = None if is_fin else cash_ratio.get(code)
             if cr is not None and cr < cfg["cash_ratio_min"]:
                 continue
 
@@ -184,7 +221,10 @@ class DividendModule(BaseModule):
                 if not sub.empty:
                     streak = int(div_kit.streak(sub) or 0)
                     info = div_kit.payout_summary(sub, ctx.trade_date) or {}
-                    payout = info.get("payout_ratio")
+                    # payout_summary 不返回派息率，自己算：每股分红 ÷ EPS
+                    dps_latest = info.get("latest_annual_dps")
+                    if dps_latest and eps and eps > 0:
+                        payout = float(dps_latest) / float(eps)
             if payout is not None and not (cfg["payout_min"] <= payout <= cfg["payout_max"]):
                 continue
             stats["dividend"] += 1
@@ -216,7 +256,7 @@ class DividendModule(BaseModule):
             reasons = [
                 f"PE {pe:.1f}",
                 f"股息率 {dv*100:.2f}%",
-                f"ROE {roe*100:.1f}%" if roe else "ROE -",
+                f"ROE {roe*100:.1f}%（连续 {roe_streak} 年）" if roe else "ROE -",
                 f"毛利率 {gm*100:.0f}%" if gm else "毛利率 -",
                 f"负债率 {debt*100:.0f}%" if debt else "负债率 -",
             ]
@@ -225,6 +265,8 @@ class DividendModule(BaseModule):
                 risks.append("收现比未校验（缺 cashflow/income 表）")
             if payout is None:
                 risks.append("派息率未校验")
+            elif payout > 0.70:
+                risks.append(f"派息率 {payout*100:.0f}% 偏高（文章建议 30~70%）")
             if streak and streak < 5:
                 risks.append(f"连续分红仅 {streak} 年")
 
@@ -241,6 +283,8 @@ class DividendModule(BaseModule):
                     "cash_ratio": round(cr, 2) if cr else None,
                     "payout": round(payout * 100, 1) if payout else None,
                     "dividend_years": streak,
+                    "roe_streak": roe_streak,
+                    "is_financial": bool(is_fin),
                     "price": round(price, 2),
                     "ma120": round(ma, 2),
                     "deviation": round((ratio - 1) * 100, 1),
