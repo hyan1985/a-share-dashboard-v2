@@ -339,6 +339,7 @@ def fetch(client, store: ParquetStore, target: Optional[str] = None,
           all_tables: bool = False,
           with_dividend: bool = False,
           dividend_limit: int = 400,
+          dividend_all: bool = False,
           verbose: bool = True) -> Dict[str, FetchResult]:
     """增量拉取。backfill_* 指定回补范围。"""
     calendar.ensure_trade_cal(client, store, start_year=2008, force=False)
@@ -418,7 +419,11 @@ def fetch(client, store: ParquetStore, target: Optional[str] = None,
     # 它只需要每周更新一次，所以默认跳过，由 --with-dividend 触发。
     if with_dividend:
         fetch_dividend_history(client, store, target_date,
-                               limit=dividend_limit, verbose=verbose)
+                               # dividend_all=True 时不按股息率筛，
+                               # 把全市场都缓存一遍（一次性，约 5500 次请求）
+                               dv_threshold=0.0 if dividend_all else 3.0,
+                               limit=dividend_limit,
+                               verbose=verbose)
     elif verbose:
         print("  - 分红历史：跳过（每周单独更新，加 --with-dividend）")
 
