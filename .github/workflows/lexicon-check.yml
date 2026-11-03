@@ -1,0 +1,46 @@
+name: 词库体检
+
+on:
+  schedule:
+    # 每月 1 日 10:00 北京时间（UTC 02:00）
+    - cron: "0 2 1 * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - run: pip install -r requirements.txt
+
+      # 词库体检要读股吧数据，复用每日任务那份缓存
+      - uses: actions/cache@v4
+        with:
+          path: data
+          key: ashare-data-${{ github.run_id }}
+          restore-keys: ashare-data-
+
+      - name: 生成词库体检报告
+        run: |
+          python tools/lexicon_gap.py --top 40 > report.md
+          cat report.md
+
+      - name: 提交为 issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TITLE="词库体检 $(date -u +%Y-%m)"
+          if gh issue list --search "$TITLE in:title" --state all --json number --jq '.[0].number' | grep -q .; then
+            echo "本月 issue 已存在，跳过"
+          else
+            gh issue create --title "$TITLE" --body-file report.md
+          fi
