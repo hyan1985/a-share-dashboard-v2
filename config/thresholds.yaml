@@ -1,49 +1,49 @@
-# 所有阈值集中在此。原则：优先用历史分位数，不用绝对值。
-# 分位表达在代码里由 kit/util.py 的 pct_rank() 解析，例如 "p20" = 近 N 年 20% 分位。
-
 universe:
-  # 基础池过滤
   exclude_st: true
   exclude_delisting_risk: true
   min_listed_days: 250
-  min_avg_amount_wan: 5000      # 日均成交额下限（万元）
+  min_avg_amount_wan: 5000
   min_price: 2.0
-
 calendar:
-  # 分位数窗口
   rank_window_days: 250
   rank_window_years: 5
-
 overview:
-  # 情绪 regime 六档，阈值一律用分位
-  limit_up_cold: "p20"          # 涨停家数低于近 250 日 20% 分位 → 偏冷
-  limit_up_hot: "p80"           # 高于 80% 分位 → 偏热
-  limit_down_hot: "p80"
-  amount_pct_hot: "p90"
+  limit_up_cold: p20
+  limit_up_hot: p80
+  limit_down_hot: p80
+  amount_pct_hot: p90
   sentiment_cold: -0.3
   sentiment_hot: 0.6
-
 dividend:
-  # 来自《红利股投资—渣男手册法》。这些是硬门槛，不满足就不进候选。
-  pe_max: 20                 # > 25 不考虑
-  yield_min: 0.03            # 股息率 3%
-  gross_margin_min: 0.30     # 毛利率 30%，证明有定价权
-  roe_min: 0.15              # ROE 15%，要求连续多年
-  roe_min_streak: 2          # 至少连续几年达标
-  debt_max: 0.65             # 资产负债率上限（金融股豁免）
-  cash_ratio_min: 1.0        # 收现比，银行不适用
-  payout_min: 0.30           # 派息率下限
-  payout_max: 1.00           # 超过 100% 在吃老本
-  ma_long: 120               # 锚定半年线
-  ma_short: 60               # 复投参考线
-  buy_ratio: 0.88            # MA120 × 0.88 买入
-  sell_ratio: 1.12           # MA120 × 1.12 卖出
+  pe_max: 20
+  yield_min: 0.03
+  gross_margin_min: 0.3
+  roe_min: 0.15
+  roe_min_streak: 2
+  debt_max: 0.65
+  cash_ratio_min: 1.0
+  payout_min: 0.3
+  payout_max: 1.0
+  ma_long: 120
+  ma_short: 60
+  buy_ratio: 0.88
+  sell_ratio: 1.12
 levels:
-  swing_windows: [20, 60]
+  swing_windows:
+  - 20
+  - 60
   chip_window: 250
   chip_bin_pct: 0.005
   cluster_pct: 0.005
   near_support_pct: 0.03
   atr_window: 14
-
-# 财报季（源自「财报月数据库」的 SQLite 产物，只读）
+bank:
+  yield_min: 0.04
+  pe_max: 8.0
+  roe_min: 0.08
+  payout_min: 0.2
+  payout_max: 0.7
+  dividend_years_min: 5
+  ma_long: 120
+  buy_ratio: 0.88
+  sell_ratio: 1.12
