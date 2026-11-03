@@ -43,7 +43,7 @@ DEFAULTS = {
     "gross_margin_min": 0.30,
     "roe_min": 0.15,
     "debt_max": 0.65,
-    "payout_min": 0.30,
+    "payout_min": 0.0,
     "payout_max": 1.00,
     "cash_ratio_min": 1.0,
     "ma_long": 120,
@@ -261,8 +261,10 @@ class DividendModule(BaseModule):
                                   if fin_year else None)
                     if dps_latest and eps and eps > 0:
                         payout = float(dps_latest) / float(eps)
-            # 派息率：>100% 说明在吃老本，<20% 说明分红意愿弱
-            if payout is not None and not (cfg["payout_min"] <= payout <= cfg["payout_max"]):
+            # 派息率只挡 >100%（文章原文的「警惕线」：在吃老本不可持续）。
+            # 70~100% 不加硬筛——高派息率是「现金奶牛」的特征，正是要找的。
+            # 30~70% 之外给提示，不改判。
+            if payout is not None and payout > cfg["payout_max"]:
                 continue
             stats["dividend"] += 1
 
@@ -302,7 +304,9 @@ class DividendModule(BaseModule):
             if payout is None:
                 risks.append("派息率未校验")
             elif payout > 0.70:
-                risks.append(f"派息率 {payout*100:.0f}% 偏高（文章建议 30~70%）")
+                risks.append(f"派息率 {payout*100:.0f}% 高于文章建议的 30~70%，留意可持续性")
+            elif payout < 0.30:
+                risks.append(f"派息率 {payout*100:.0f}% 低于文章建议的 30~70%，分红意愿偏弱")
             if streak and streak < 5:
                 risks.append(f"连续分红仅 {streak} 年")
 
