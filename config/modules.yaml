@@ -17,3 +17,12 @@ modules:
     expanded: true
     params:
       max_candidates: 20
+
+  - id: bank
+    title: 银行专区
+    kind: screener
+    enabled: true
+    order: 20
+    expanded: true
+    params:
+      max_candidates: 15
