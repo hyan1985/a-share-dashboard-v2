@@ -1,0 +1,19 @@
+# 分区注册表：加一个分区 = 加一个模块文件 + 这里加一条配置
+# kind: environment 产出市场状态（总览）；screener 产出候选股票
+
+modules:
+  - id: overview
+    title: 总览
+    kind: environment
+    enabled: true
+    order: 0
+    expanded: true
+
+  - id: dividend
+    title: 红利股 · 渣男手册
+    kind: screener
+    enabled: true
+    order: 10
+    expanded: true
+    params:
+      max_candidates: 20

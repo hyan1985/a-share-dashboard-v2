@@ -1,0 +1,8 @@
+pandas>=1.5,<3
+numpy>=1.21,<2
+pyarrow>=10.0,<20
+six>=1.16,<2
+tushare>=1.4.29,<1.5
+requests>=2.31,<3
+beautifulsoup4>=4.11,<5
+jieba>=0.42,<1

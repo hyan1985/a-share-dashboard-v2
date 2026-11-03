@@ -1,0 +1,89 @@
+# 所有阈值集中在此。原则：优先用历史分位数，不用绝对值。
+# 分位表达在代码里由 kit/util.py 的 pct_rank() 解析，例如 "p20" = 近 N 年 20% 分位。
+
+universe:
+  # 基础池过滤
+  exclude_st: true
+  exclude_delisting_risk: true
+  min_listed_days: 250
+  min_avg_amount_wan: 5000      # 日均成交额下限（万元）
+  min_price: 2.0
+
+calendar:
+  # 分位数窗口
+  rank_window_days: 250
+  rank_window_years: 5
+
+overview:
+  # 情绪 regime 六档，阈值一律用分位
+  limit_up_cold: "p20"          # 涨停家数低于近 250 日 20% 分位 → 偏冷
+  limit_up_hot: "p80"           # 高于 80% 分位 → 偏热
+  limit_down_hot: "p80"
+  amount_pct_hot: "p90"
+  sentiment_cold: -0.3
+  sentiment_hot: 0.6
+
+breakout:
+  box_window: [60, 120]
+  amplitude_max_pct: "p20"      # 箱体振幅处于近 250 日的下 20% 分位
+  boll_width_pct: "p20"
+  shrink_ratio: 0.8             # 近 20 日均量 / 近 120 日均量
+  breakout_vol_ratio: 1.5
+  require_breakout: false       # true = 只选已放量突破箱体的（回测见 README）
+  max_per_industry: 3           # 单行业最多入选数
+  steady_slots: 2               # 预留给银行/公用事业等高确定性行业的名额，防止被单一板块占满
+  max_candidates: 15
+
+dragon:
+  min_limit_up_days: 2
+  turnover_prefer: [3, 15]      # 换手率健康区间（%）
+  turnover_max: 25              # 超过视为出货嫌疑
+  max_candidates: 15
+
+cigar:
+  pb_max: 1.0
+  pb_pct_max: "p10"             # 近 5 年 PB 分位
+  dedt_positive_years: 3        # 扣非净利润连续为正年数
+  profit_quality_min: 0.7       # dtprofit_to_profit 扣非/净利润
+  debt_to_assets_max: 0.6
+  goodwill_to_equity_max: 0.3
+  pledge_max: 0.7
+  max_per_industry: 3           # 单行业最多入选数
+  steady_slots: 2               # 预留给银行/公用事业等高确定性行业的名额（破净股里银行极多）
+  white_horse:                  # 惊喜项：主池内额外满足则打 badge
+    growth_years: 2             # 近 3 年扣非同比至少 2 年为正
+    drawdown_max: 0.10
+    roe_min: 0.10
+    roe_years: 3
+
+dividend:
+  yield_min: 0.04
+  streak_years: 5
+  verify_top: 80                # 先按粗筛排序取前 N 只，再做连续分红校验
+  max_per_industry: 3           # 单行业最多入选数
+  steady_slots: 2               # 预留给银行/公用事业等高确定性行业的名额
+  payout_ratio: [0.30, 0.80]
+  roe_min: 0.08
+  ocf_to_ni_min: 0.8
+  max_candidates: 15
+
+mainrise:
+  vol_weight: 28                # 量能权重（原 15）
+  min_score: 60
+  max_candidates: 15
+
+afterclose:
+  max_candidates: 15
+
+levels:
+  swing_windows: [20, 60]
+  chip_window: 250
+  chip_bin_pct: 0.005
+  cluster_pct: 0.005
+  near_support_pct: 0.03
+  atr_window: 14
+
+# 财报季（源自「财报月数据库」的 SQLite 产物，只读）
+earnings:
+  db_path: "earnings/forecast.db"   # 相对 data/ 目录
+  max_candidates: 15

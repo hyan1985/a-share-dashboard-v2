@@ -1,0 +1,64 @@
+name: 每日更新看板
+
+on:
+  schedule:
+    # 18:30 北京时间（UTC 10:30），收盘后数据基本已入库
+    - cron: "30 10 * * 1-5"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - name: 安装依赖
+        run: pip install -r requirements.txt
+
+      - name: 首次回填数据（缓存未命中时）
+        env:
+          TUSHARE_TOKEN: ${{ secrets.TUSHARE_TOKEN }}
+        run: |
+          if [ -f data/.watermark.json ]; then
+            echo "已有数据，增量更新"
+            python -m src.cli fetch
+          else
+            echo "首次运行，回填 200 个交易日"
+            python -m src.cli fetch --backfill 200
+          fi
+
+      - name: 生成看板
+        run: python -m src.cli run
+
+      - name: 检查产物
+        run: |
+          test -f output/index.html || { echo "看板没生成"; exit 1; }
+          ls -lh output/index.html
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: output
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

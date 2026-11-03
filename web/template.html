@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark light">
+<title>{{TITLE}}</title>
+<style>{{STYLE}}</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <span class="dot"></span>
+    <span>A股看板</span>
+  </div>
+  <div class="meta">
+    <span class="chip">{{TRADE_DATE}}</span>
+    <span class="muted" id="generated">生成于 {{GENERATED_AT}}</span>
+  </div>
+</header>
+
+<main id="app">{{CONTENT}}</main>
+
+<footer class="foot">
+  <p>本页面由程序自动生成，仅作数据展示与研究，<strong>不构成投资建议</strong>。</p>
+  <p class="muted">数据来源 Tushare Pro · 生成时间 {{GENERATED_AT}}</p>
+</footer>
+
+<script>
+(function () {
+  var root = document.querySelector('[data-tabs]');
+  if (!root) return;
+  var tabs = Array.prototype.slice.call(root.querySelectorAll('.tab'));
+  var panels = Array.prototype.slice.call(root.querySelectorAll('.panel'));
+  var keys = tabs.map(function (t) { return t.dataset.tab; });
+
+  function activate(id) {
+    tabs.forEach(function (t) {
+      var on = t.dataset.tab === id;
+      t.classList.toggle('active', on);
+      t.setAttribute('aria-selected', on ? 'true' : 'false');
+    });
+    panels.forEach(function (p) {
+      p.classList.toggle('active', p.dataset.panel === id);
+    });
+  }
+
+  tabs.forEach(function (t) {
+    t.addEventListener('click', function () {
+      activate(t.dataset.tab);
+      if (window.history && history.replaceState) {
+        history.replaceState(null, '', '#' + t.dataset.tab);
+      }
+    });
+  });
+
+  var hash = (window.location.hash || '').replace('#', '');
+  if (hash && keys.indexOf(hash) >= 0) activate(hash);
+})();
+</script>
+<script id="snapshot" type="application/json">{{DATA}}</script>
+<div id="recModal" class="modal" hidden>
+  <div class="modal-box">
+    <h3>记一笔买入</h3>
+    <div class="field"><label>标的</label>
+      <select id="rCode">
+        <option value="563020.SH">A股红利低波 563020</option>
+        <option value="513530.SH">港股红利 513530</option>
+      </select></div>
+    <div class="field"><label>份额</label>
+      <input id="rShares" type="number" step="1" placeholder="1700"></div>
+    <div class="field"><label>价格</label>
+      <input id="rPrice" type="number" step="0.001" placeholder="留空用收盘价"></div>
+    <div class="field"><label>手续费</label>
+      <input id="rFee" type="number" step="0.01" value="1"></div>
+    <div class="modal-actions">
+      <button id="rCancel" class="ghost">取消</button>
+      <button id="rOk">确认登记</button>
+    </div>
+    <div id="rMsg" class="modal-msg"></div>
+  </div>
+</div>
+<script>
+(function () {
+  if (!location.protocol.startsWith('http')) return;   // 双击文件打开时不显示
+  var btn = document.getElementById('recBtn');
+  var modal = document.getElementById('recModal');
+  var msg = document.getElementById('rMsg');
+  if (btn) btn.hidden = false;
+  var cashBtn = document.getElementById('cashBtn');
+  if (cashBtn) cashBtn.hidden = false;
+  if (cashBtn) cashBtn.addEventListener('click', function () {
+    var cur = cashBtn.dataset.amount || '0';
+    var v = window.prompt('银行卡里的钱（含活期/货基，不含券商账户）', cur);
+    if (v === null) return;
+    fetch('/api/cash', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ amount: v })
+    }).then(function (r) { return r.json(); }).then(function (d) {
+      if (d.ok) { location.reload(); } else { alert(d.out || '失败'); }
+    });
+  });
+
+  function close() { modal.hidden = true; msg.textContent = ''; }
+  if (btn) btn.addEventListener('click', function () { modal.hidden = false; });
+  if (location.hash === '#rec') { modal.hidden = false; }   // 收藏夹直达表单
+  document.getElementById('rCancel').addEventListener('click', close);
+  modal.addEventListener('click', function (e) { if (e.target === modal) close(); });
+
+  document.getElementById('rOk').addEventListener('click', function () {
+    var payload = {
+      code: document.getElementById('rCode').value,
+      shares: document.getElementById('rShares').value,
+      price: document.getElementById('rPrice').value,
+      fee: document.getElementById('rFee').value
+    };
+    if (!payload.shares || Number(payload.shares) <= 0) {
+      msg.textContent = '份额要填大于 0 的数字';
+      return;
+    }
+    msg.textContent = '登记中…';
+    fetch('/api/buy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }).then(function (r) { return r.json(); }).then(function (d) {
+      if (d.ok) { location.reload(); }
+      else { msg.textContent = d.out || d.msg || '失败'; }
+    }).catch(function (e) { msg.textContent = '请求失败：' + e; });
+  });
+})();
+</script>
+</body>
+</html>
