@@ -31,11 +31,18 @@ class TableSpec:
     expect_rows: int = 1           # 低于此值视为未入库
     codes: Sequence[str] = field(default_factory=tuple)
     label: str = ""
+    # 写入时只保留这些列。全市场十年数据很大，但模块实际只用到少数几列，
+    # 例如 daily_basic 有 18 列，两个模块只读 ts_code/pe_ttm/dv_ttm/total_mv。
+    keep: Sequence[str] = field(default_factory=tuple)
 
 
 TABLES: Tuple[TableSpec, ...] = (
-    TableSpec("daily", "daily", expect_rows=4000, label="日线行情"),
-    TableSpec("daily_basic", "daily_basic", expect_rows=4000, label="每日指标"),
+    TableSpec("daily", "daily", expect_rows=4000, label="日线行情",
+              keep=("ts_code", "trade_date", "open", "high", "low", "close",
+                    "pre_close", "pct_chg", "vol", "amount")),
+    TableSpec("daily_basic", "daily_basic", expect_rows=4000, label="每日指标",
+              keep=("ts_code", "trade_date", "close", "pe", "pe_ttm", "pb",
+                    "dv_ttm", "total_mv")),
     # 注意：这个打板专题接口早期年份（2016-2019）返回 0 行是**正常**的，
     # 不是"上游未入库"。expect_rows=1 会让每个历史日期白白重试 3 次。
     TableSpec("limit_list_d", "limit_list_d", expect_rows=0, label="涨跌停/炸板"),
@@ -43,12 +50,6 @@ TABLES: Tuple[TableSpec, ...] = (
               label="指数日线"),
     # 以下暂未使用，需要时用 --all-tables 拉取
     TableSpec("adj_factor", "adj_factor", expect_rows=4000, label="复权因子"),
-    TableSpec("moneyflow", "moneyflow", expect_rows=3000, label="资金流向"),
-    TableSpec("stk_factor", "stk_factor", expect_rows=4000, label="技术面因子"),
-    TableSpec("limit_step", "limit_step", expect_rows=0, label="连板天梯"),
-    TableSpec("limit_cpt_list", "limit_cpt_list", expect_rows=1, label="最强板块"),
-    TableSpec("margin", "margin", expect_rows=1, label="融资融券"),
-    TableSpec("top_list", "top_list", expect_rows=1, label="龙虎榜"),
 )
 
 # 默认只拉看板真正用到的表：每日约 6 次请求
@@ -305,6 +306,10 @@ def fetch_table(client, store: ParquetStore, spec: TableSpec,
                       f"（期望 ≥{expect}），判定未入库")
             continue
 
+        if spec.keep:
+            cols = [c for c in spec.keep if c in df.columns]
+            if len(cols) >= max(3, len(spec.keep) // 2):
+                df = df[cols]
         store.write_dated(spec.name, date, df)
         store.set_watermark(spec.name, date)
         result.fetched += 1
