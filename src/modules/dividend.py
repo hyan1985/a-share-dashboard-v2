@@ -55,6 +55,25 @@ DEFAULTS = {
 MA_WINDOW = 130          # 用 130 天算 MA120，留点余量
 
 
+
+def classify_zone(deviation: float, buy_ratio: float = 0.88,
+                  sell_ratio: float = 1.12):
+    """按价格相对 MA120 的偏离度判定区间。
+
+    deviation = price / MA120 - 1
+    ≤ buy_ratio - 1（默认 -12%）→ 买入区
+    ≥ sell_ratio - 1（默认 +12%）→ 卖出区
+    """
+    # 容差是必须的：1.12 - 1 在浮点里等于 0.1200000000000001，
+    # 正好 -12% 或 +12% 的股票会卡在边界外，判定和显示对不上。
+    eps = 1e-9
+    if deviation <= buy_ratio - 1 + eps:
+        return "买入区", "buy"
+    if deviation >= sell_ratio - 1 - eps:
+        return "卖出区", "sell"
+    return "观望", "hold"
+
+
 class DividendModule(BaseModule):
     id = "dividend"
     title = "红利股 · 渣男手册"
@@ -117,7 +136,9 @@ class DividendModule(BaseModule):
 
     # ---------------- 主流程 ----------------
     def compute(self, ctx: Ctx) -> dict:
+        # 阈值统一放 config/thresholds.yaml，代码里只留兜底默认值
         cfg = dict(DEFAULTS)
+        cfg.update(self.thresholds.get("dividend") or {})
         cfg.update(self.params or {})
 
         snap = self._snapshot(ctx)
@@ -125,6 +146,16 @@ class DividendModule(BaseModule):
         if snap.empty or px.empty:
             return {"status": STATUS_STALE,
                     "summary": "缺少行情或快照数据，请先 make fetch"}
+
+        # 当日不复权收盘价，只用于显示（用户拿行情软件对照）
+        raw_close = {}
+        try:
+            d1 = ctx.on("daily")
+            if not d1.empty and "close" in d1.columns:
+                raw_close = dict(zip(d1["ts_code"],
+                                     pd.to_numeric(d1["close"], errors="coerce")))
+        except Exception:
+            raw_close = {}
 
         meta = uni.stock_meta(ctx.store)
         periods = fin_kit.usable_periods(ctx.store, need=3, as_of=ctx.trade_date)
@@ -235,22 +266,21 @@ class DividendModule(BaseModule):
             series = px[code].dropna()
             if len(series) < ma_long:
                 continue
-            price = float(series.iloc[-1])
+            price_adj = float(series.iloc[-1])
+            raw_px = raw_close.get(code)
+            # 复权价只用来算均线和偏离；面板上要显示真实收盘价，
+            # 否则用户拿自己的行情软件对不上（格力复权价能到 9000 多）。
+            price = float(raw_px) if raw_px and raw_px == raw_px else price_adj
             ma = float(series.tail(ma_long).mean())
             ma_s = float(series.tail(ma_short).mean()) if len(series) >= ma_short else None
             if ma <= 0:
                 continue
-            ratio = price / ma
+            ratio = price_adj / ma
 
             # 价格不到半年线一半，多半是复权或上市初期的数据问题，不是"便宜"
             if ratio < 0.5:
                 continue
-            if ratio <= cfg["buy_ratio"]:
-                zone, badge = "买入区", "buy"
-            elif ratio >= cfg["sell_ratio"]:
-                zone, badge = "卖出区", "sell"
-            else:
-                zone, badge = "观望", "hold"
+            zone, badge = classify_zone(ratio - 1, cfg["buy_ratio"], cfg["sell_ratio"])
 
             stats["passed"] += 1
             reasons = [
@@ -286,9 +316,13 @@ class DividendModule(BaseModule):
                     "roe_streak": roe_streak,
                     "is_financial": bool(is_fin),
                     "price": round(price, 2),
-                    "ma120": round(ma, 2),
+                    "price_adj": round(price_adj, 2),
+                    # 折算到现价尺度的半年线：用户拿行情软件对照时看得懂
+                    "ma120": round(price / ratio, 2) if ratio else None,
+                    "ma120_adj": round(ma, 2),
                     "deviation": round((ratio - 1) * 100, 1),
-                    "ma60": round(ma_s, 2) if ma_s else None,
+                    "ma60": (round(price / (price_adj / ma_s), 2)
+                             if ma_s and price_adj else None),
                     "reinvest_ok": bool(ma_s and price < ma_s),
                     "zone": zone,
                 },
