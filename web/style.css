@@ -364,3 +364,44 @@ ul.why{margin:0;padding-left:18px;color:var(--muted);font-size:13px;line-height:
 ul.why li::marker{color:var(--cold)}
 ul.why.caveat li::marker{color:var(--warm)}
 .foot{text-align:center;color:var(--muted);font-size:12px;line-height:1.8;padding:24px 0}
+
+/* ---------- 可读性优化（2026-11） ----------
+   原样式信息密度过高：KPI 数字和说明文字同字号、行距偏紧、
+   长段说明挤在一起。这一层只调排版，不动结构。 */
+
+/* 关键数字放大：一眼能看到"今天多少点、风险多少分" */
+.kpi .v { font-size: 21px; font-weight: 700; letter-spacing: -0.02em; }
+.kpi .k { font-size: 12px; letter-spacing: 0.02em; }
+
+/* 卡片之间留白更大，边界更清楚 */
+.card { padding: 22px 24px; }
+.card + .card { margin-top: 6px; }
+
+/* 段落行距：原 1.5 对中文偏挤 */
+.card p, .card li { line-height: 1.75; }
+.card-sub { line-height: 1.6; }
+
+/* 指标行：名称和数值分开对齐，避免糊成一片 */
+.metric-row {
+  display: flex; align-items: baseline; justify-content: space-between;
+  gap: 14px; padding: 7px 0;
+  border-bottom: 1px solid rgba(255,255,255,.045);
+}
+.metric-row:last-child { border-bottom: 0; }
+.metric-row .name { font-size: 13px; color: var(--muted); }
+.metric-row .val { font-size: 14px; font-weight: 600; font-variant-numeric: tabular-nums; }
+
+/* 分位条更粗、更容易读出位置 */
+.bar { height: 7px; border-radius: 999px; }
+.bar > i { border-radius: 999px; }
+
+/* 表格：等宽数字 + 更松的行距 */
+table { font-variant-numeric: tabular-nums; }
+table th, table td { padding: 9px 12px; line-height: 1.6; }
+
+/* 手机竖屏：卡片内边距收一点，避免内容被挤成一条线 */
+@media (max-width: 640px) {
+  .card { padding: 16px 14px; }
+  .kpi .v { font-size: 19px; }
+  .kpis { grid-template-columns: repeat(2, 1fr); }
+}
