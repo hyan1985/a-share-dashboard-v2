@@ -94,9 +94,13 @@ def load_valuation_config():
 # 权重是我的选择，没有文献依据，写在这里是为了将来可以调：
 # 估值占 45%（双估值是方法主体），位置占 40%（用户实测高位误报最致命），
 # 趋势占 15%（只做辅助，避免把追涨的标的打得太低）。
-WEIGHT_VALUE = 0.45
-WEIGHT_POSITION = 0.40
-WEIGHT_TREND = 0.15
+# 权重来自 tools/backtest_bank_windows.py 的回测（106 个月 × 42 只银行）：
+# 三个因子在 60/120 日窗口全部显著，符号全部为正。
+# 单独看，位置因子最强（IC 0.235 @120日），等权合成反而被稀释到 0.208。
+# 所以位置给 0.60，其余两个各 0.20。
+WEIGHT_VALUE = 0.20
+WEIGHT_POSITION = 0.60
+WEIGHT_TREND = 0.20
 
 # 现价低于买点 25% 就算估值满分
 VALUE_FULL_AT = 0.25
@@ -110,12 +114,14 @@ def score_components(buy_price, price, yr_position, chg_3m):
     if buy_price and price and buy_price > 0:
         discount = buy_price / price - 1.0          # 现价比买点低多少
         value = max(0.0, min(1.0, discount / VALUE_FULL_AT)) * 100.0
+    # 位置和趋势都是「越高越好」——回测里这两个因子符号为正，
+    # 原本按「低位好」设计是反的，会系统性压低强势标的。
     position = 50.0
     if yr_position is not None:
-        position = max(0.0, min(1.0, 1.0 - yr_position / 100.0)) * 100.0
+        position = max(0.0, min(1.0, yr_position / 100.0)) * 100.0
     trend = 50.0
     if chg_3m is not None:
-        trend = max(0.0, min(1.0, 1.0 - chg_3m / TREND_ZERO_AT)) * 100.0
+        trend = max(0.0, min(1.0, chg_3m / TREND_ZERO_AT)) * 100.0
     total = (value * WEIGHT_VALUE
              + position * WEIGHT_POSITION
              + trend * WEIGHT_TREND)
