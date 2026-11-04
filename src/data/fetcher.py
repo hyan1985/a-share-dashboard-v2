@@ -7,6 +7,8 @@
 """
 from __future__ import annotations
 
+import os
+
 import time
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Sequence, Tuple
@@ -171,7 +173,9 @@ def fetch_financials(client, store: ParquetStore, trade_date_compact: str,
 
 
 CASHFLOW_API = "cashflow_vip"
-FILL_BATCH = 300        # 每轮最多逐只补多少只
+# 每轮最多逐只补多少只。日常任务用小批量（不拖慢主流程），
+# 一次性补全的 workflow 用环境变量调大。
+FILL_BATCH = int(os.environ.get("CASHFLOW_FILL_BATCH", "300"))
 INCOME_API = "income_vip"
 
 
