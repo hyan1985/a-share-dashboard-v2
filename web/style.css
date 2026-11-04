@@ -405,3 +405,33 @@ table th, table td { padding: 9px 12px; line-height: 1.6; }
   .kpi .v { font-size: 19px; }
   .kpis { grid-template-columns: repeat(2, 1fr); }
 }
+
+/* ---------- 总览重设计：先给结论，再给细节 ---------- */
+.verdict {
+  display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap;
+  padding: 16px 20px; border-radius: 12px; margin-bottom: 16px;
+  background: var(--bg2); border-left: 4px solid var(--line);
+}
+.verdict.warn { border-left-color: #e0663a; background: rgba(224,102,58,.07); }
+.verdict.cold { border-left-color: #4aa3d8; background: rgba(74,163,216,.07); }
+.verdict.warm { border-left-color: #e0a83a; background: rgba(224,168,58,.07); }
+.verdict.flat { border-left-color: #6b7280; }
+.verdict-main { font-size: 20px; font-weight: 700; letter-spacing: -.01em; }
+.verdict-sub { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+.temps { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 16px; }
+.temp { padding: 14px 16px; background: var(--bg2); border-radius: 12px; border: 1px solid var(--line); }
+.temp-head { display: flex; align-items: baseline; gap: 6px; margin-bottom: 9px; }
+.temp-head span { font-size: 13px; color: var(--muted); }
+.temp-head b { font-size: 24px; font-weight: 700; margin-left: auto; font-variant-numeric: tabular-nums; }
+.temp-head i { font-size: 12px; color: var(--muted); font-style: normal; }
+.temp-foot { font-size: 12px; color: var(--muted); margin-top: 7px; }
+.temp .bar { height: 8px; }
+.temp .bar.risk > i { background: #e0663a; }
+.kpis.compact { margin-bottom: 4px; }
+.kpis.compact .kpi .v { font-size: 17px; }
+
+@media (max-width: 640px) {
+  .temps { grid-template-columns: 1fr; }
+  .verdict-main { font-size: 17px; }
+}
