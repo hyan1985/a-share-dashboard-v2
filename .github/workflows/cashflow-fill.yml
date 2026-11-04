@@ -1,0 +1,34 @@
+name: 收现比数据补全（一次性）
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  fill:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+
+      - run: pip install -r requirements.txt
+
+      - uses: actions/cache@v4
+        with:
+          path: data
+          key: ashare-data-${{ github.run_id }}
+          restore-keys: ashare-data-
+
+      # cashflow_vip 单次有行数上限，全市场有 1500 多只拉不到。
+      # 这里把逐只补的批量开到 2000，一次补齐。
+      - name: 补齐缺失的 cashflow
+        env:
+          TUSHARE_TOKEN: ${{ secrets.TUSHARE_TOKEN }}
+          CASHFLOW_FILL_BATCH: "2000"
+        run: python -m src.cli fetch
