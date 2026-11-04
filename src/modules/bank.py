@@ -109,8 +109,9 @@ class BankModule(BaseModule):
         if not bank_codes:
             return {"status": STATUS_OK, "summary": "股票列表里没有银行分类"}
 
-        dates = calendar.recent_open_dates(ctx.store, MA_WINDOW + 10,
-                                           end=ctx.trade_date)
+        # 多拉一年：要算「近一年价格位置」和「近 3 月涨幅」，
+        # 只看 130 天算不出位置——这正是双估值漏掉的东西。
+        dates = calendar.recent_open_dates(ctx.store, 260, end=ctx.trade_date)
         px = ret.total_return_frame(ctx.store, bank_codes, dates) if dates else pd.DataFrame()
 
         raw_close = {}
@@ -211,7 +212,7 @@ class BankModule(BaseModule):
 
             zone, badge = "无数据", "hold"
             price = price_adj = ma_display = None
-            deviation = None
+            deviation = yr_position = chg_3m = None
             if code in px.columns:
                 series = px[code].dropna()
                 if len(series) >= cfg["ma_long"]:
@@ -227,6 +228,16 @@ class BankModule(BaseModule):
                                                     cfg["sell_ratio"])
                         if buy_price and price:
                             gap_pct = (price / buy_price - 1) * 100
+                        # 位置指标：双估值只回答「相对目标价贵不贵」，
+                        # 不回答「相对自己这一年的走势在哪」。护盘行情里
+                        # 银行能从低位涨 20%，双估值仍然是「买点」——
+                        # 这就是它最危险的地方，所以位置要单独算、单独展示。
+                        tail = series.tail(250)
+                        lo, hi = float(tail.min()), float(tail.max())
+                        if hi > lo:
+                            yr_position = (price_adj - lo) / (hi - lo) * 100
+                        if len(series) > 63:
+                            chg_3m = (price_adj / float(series.iloc[-63]) - 1) * 100
 
             stats["passed"] += 1
             rows.append(Candidate(
@@ -246,6 +257,12 @@ class BankModule(BaseModule):
                     "zone": zone,
                     "buy_price": round(buy_price, 2) if buy_price else None,
                     "gap_pct": round(gap_pct, 1) if gap_pct is not None else None,
+                    "yr_position": round(yr_position, 0) if yr_position is not None else None,
+                    "chg_3m": round(chg_3m, 1) if chg_3m is not None else None,
+                    # 只看「近一年位置」。原来还要求 MA120 偏离 ≥8%，
+                    # 但护盘行情里股价是台阶式抬升的，偏离均线并不大，
+                    # 位置却已经到顶——那个附加条件会让高位标的漏判。
+                    "overheated": bool(yr_position is not None and yr_position >= 85),
                     "bank_type": vcfg.get("type", ""),
                 },
                 reasons=[f"PE {pe:.1f}", f"股息率 {dv:.2f}%", f"ROE {roe*100:.1f}%"],
@@ -254,7 +271,9 @@ class BankModule(BaseModule):
                 badges=([badge] + (
                     [f"低于买点 {abs(gap_pct):.1f}%"] if gap_pct is not None and gap_pct <= 0
                     else [f"还需跌 {gap_pct:.1f}%"] if gap_pct is not None
-                    else [])),
+                    else [])
+                    + ([f"⚠️一年高位 {yr_position:.0f}%"] if yr_position is not None
+                       and yr_position >= 80 else [])),
             ))
 
         rows.sort(key=lambda r: r.metrics.get("deviation") or 999)
@@ -264,12 +283,15 @@ class BankModule(BaseModule):
         # 双估值口径：现价已低于「双估值买入价」的只数
         in_range = sum(1 for r in rows
                        if r.metrics.get("gap_pct") is not None
-                       and r.metrics["gap_pct"] <= 0)
+                       and r.metrics["gap_pct"] <= 0
+                       and not r.metrics.get("overheated"))
+        hot = sum(1 for r in rows if r.metrics.get("overheated"))
 
         return {
             "status": STATUS_OK,
             "summary": (f"银行 {stats['banks']} 只 · 通过 {stats['passed']} 只 · "
-                        f"双估值已到位 {in_range} 只 · MA120 买入区 {buy} 只"),
+                        f"双估值到位且不在高位 {in_range} 只 · "
+                        f"⚠️一年高位 {hot} 只"),
             "candidates": rows,
             "context": {"thresholds": cfg, "funnel": stats},
         }
