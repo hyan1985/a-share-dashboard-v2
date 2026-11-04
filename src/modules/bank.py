@@ -94,13 +94,23 @@ def load_valuation_config():
 # 权重是我的选择，没有文献依据，写在这里是为了将来可以调：
 # 估值占 45%（双估值是方法主体），位置占 40%（用户实测高位误报最致命），
 # 趋势占 15%（只做辅助，避免把追涨的标的打得太低）。
-# 权重来自 tools/backtest_bank_windows.py 的回测（106 个月 × 42 只银行）：
-# 三个因子在 60/120 日窗口全部显著，符号全部为正。
-# 单独看，位置因子最强（IC 0.235 @120日），等权合成反而被稀释到 0.208。
-# 所以位置给 0.60，其余两个各 0.20。
-WEIGHT_VALUE = 0.20
-WEIGHT_POSITION = 0.60
-WEIGHT_TREND = 0.20
+# ---- 分工来自回测，不是凑权重 ----
+# tools/backtest_bank_windows.py（106 个月 × 42 只银行）的结果是：
+#   双估值便宜度  IC 0.088 (t 4.3)  —— 弱
+#   一年位置      IC 0.235 (t 8.6)  —— 强
+# 弱的那个不该参与排序，但它衡量的是「市场价有没有基本面支撑」，
+# 适合当门槛；强的那个衡量「现在买进去的盈亏比」，适合当排序。
+#
+# 所以本模块分成两步：
+#   第一步 基本面门槛：现价不能高于双估值买点太多，否则基本面撑不住这个价
+#   第二步 盈亏比排序：过关的里面按位置分排
+#
+# 位置和趋势权重：位置 0.85、趋势 0.15（趋势只是位置的辅助确认）。
+WEIGHT_POSITION = 0.85
+WEIGHT_TREND = 0.15
+
+# 现价高于双估值买点的容忍上限。超过就算「基本面撑不住」。
+VALUATION_TOLERANCE = 0.30
 
 # 现价低于买点 25% 就算估值满分
 VALUE_FULL_AT = 0.25
@@ -108,11 +118,26 @@ VALUE_FULL_AT = 0.25
 TREND_ZERO_AT = 30.0
 
 
+def fundamentals_ok(buy_price, price):
+    """基本面门槛：现价有没有超出双估值买点太多。
+
+    返回 (是否通过, 溢价百分比)。拿不到买点时按通过处理，
+    并在候选里标注「估值未校验」，不默认否决。
+    """
+    if not buy_price or not price or buy_price <= 0:
+        return True, None
+    premium = price / buy_price - 1.0
+    return premium <= VALUATION_TOLERANCE, premium * 100.0
+
+
 def score_components(buy_price, price, yr_position, chg_3m):
-    """返回 (综合分, 估值分, 位置分, 趋势分)，缺数据的分项按中性 50 计。"""
+    """返回 (综合分, 估值分, 位置分, 趋势分)。
+
+    估值分只作为展示，不参与综合分——它衡量基本面，不是盈亏比。
+    """
     value = 50.0
     if buy_price and price and buy_price > 0:
-        discount = buy_price / price - 1.0          # 现价比买点低多少
+        discount = buy_price / price - 1.0
         value = max(0.0, min(1.0, discount / VALUE_FULL_AT)) * 100.0
     # 位置和趋势都是「越高越好」——回测里这两个因子符号为正，
     # 原本按「低位好」设计是反的，会系统性压低强势标的。
@@ -122,8 +147,7 @@ def score_components(buy_price, price, yr_position, chg_3m):
     trend = 50.0
     if chg_3m is not None:
         trend = max(0.0, min(1.0, chg_3m / TREND_ZERO_AT)) * 100.0
-    total = (value * WEIGHT_VALUE
-             + position * WEIGHT_POSITION
+    total = (position * WEIGHT_POSITION
              + trend * WEIGHT_TREND)
     return round(total, 1), round(value, 1), round(position, 1), round(trend, 1)
 
@@ -287,6 +311,10 @@ class BankModule(BaseModule):
                         if len(series) > 63:
                             chg_3m = (price_adj / float(series.iloc[-63]) - 1) * 100
 
+            fund_ok, premium = fundamentals_ok(buy_price, price)
+            if not fund_ok:
+                stats["rejected_fundamentals"] = stats.get("rejected_fundamentals", 0) + 1
+                continue
             total_score, v_s, p_s, t_s = score_components(
                 buy_price, price, yr_position, chg_3m)
 
@@ -315,6 +343,7 @@ class BankModule(BaseModule):
                     # 位置却已经到顶——那个附加条件会让高位标的漏判。
                     "overheated": bool(yr_position is not None and yr_position >= 85),
                     "score_value": v_s,
+                    "valuation_premium": round(premium, 1) if premium is not None else None,
                     "score_position": p_s,
                     "score_trend": t_s,
                     "bank_type": vcfg.get("type", ""),
@@ -326,7 +355,7 @@ class BankModule(BaseModule):
                     [f"低于买点 {abs(gap_pct):.1f}%"] if gap_pct is not None and gap_pct <= 0
                     else [f"还需跌 {gap_pct:.1f}%"] if gap_pct is not None
                     else [])
-                    + ([f"⚠️一年高位 {yr_position:.0f}%"] if yr_position is not None
+                    + ([f"位置 {yr_position:.0f}%"] if yr_position is not None
                        and yr_position >= 80 else [])),
             ))
 
@@ -335,17 +364,14 @@ class BankModule(BaseModule):
         rows = rows[:cap]
         buy = sum(1 for r in rows if r.metrics["zone"] == "买入区")
         # 双估值口径：现价已低于「双估值买入价」的只数
-        in_range = sum(1 for r in rows
-                       if r.metrics.get("gap_pct") is not None
-                       and r.metrics["gap_pct"] <= 0
-                       and not r.metrics.get("overheated"))
-        hot = sum(1 for r in rows if r.metrics.get("overheated"))
+        rejected = stats.get("rejected_fundamentals", 0)
 
         return {
             "status": STATUS_OK,
             "summary": (f"银行 {stats['banks']} 只 · 通过 {stats['passed']} 只 · "
-                        f"双估值到位且不在高位 {in_range} 只 · "
-                        f"⚠️一年高位 {hot} 只"),
+                        f"基本面过关 {stats['passed']} 只"
+                        + (f"（{rejected} 只因估值撑不住基本面被剔除）" if rejected else "")
+                        + "，按盈亏比（位置）排序"),
             "candidates": rows,
             "context": {"thresholds": cfg, "funnel": stats},
         }
