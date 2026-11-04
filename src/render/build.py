@@ -23,6 +23,43 @@ def _tone_class(tone: str) -> str:
 
 
 # ---------------- 总览 ----------------
+
+def _verdict(regime, sentiment, risk, levels, close):
+    """一句话结论：今天什么状态、要不要动手。
+
+    原来页面把 6 个指标、2 个分数、3 个点位平铺出来，
+    看完不知道该干什么。这里先给结论，细节放后面。
+    """
+    risk_score = float((risk or {}).get("score") or 0)
+    sent_score = float((sentiment or {}).get("score") or 50)
+    label = (regime or {}).get("label", "")
+    tone = (regime or {}).get("tone", "flat")
+
+    if risk_score >= 60:
+        return "风险偏高，不追高、不加仓", "warn"
+    if sent_score <= 25:
+        return "情绪冰点，可以留意机会（不是叫你重仓）", "cold"
+    if sent_score >= 78:
+        return "情绪过热，别追", "warn"
+    if tone == "cold":
+        return f"{label}，位置偏低，按计划执行", "cold"
+    if tone == "warm":
+        return f"{label}，情绪回暖，按计划执行", "warm"
+    return f"{label}，方向不明，按计划执行", "flat"
+
+
+def _distance(level, close):
+    """点位距现价多少。正数=在上方（还要涨多少才触及）。"""
+    try:
+        level = float(level)
+        close = float(close)
+        if close <= 0 or level <= 0:
+            return None
+        return (level / close - 1) * 100
+    except (TypeError, ValueError):
+        return None
+
+
 def _render_overview(r: ModuleResult) -> str:
     c = r.context or {}
     index_row = c.get("index") or {}
@@ -58,27 +95,44 @@ def _render_overview(r: ModuleResult) -> str:
     signals = risk.get("signals") or []
     sig_html = "".join(f"<li>{_e(x)}</li>" for x in signals)
 
-    levels_html = _render_levels(levels)
+    levels_html = _render_levels(levels, index_row.get("close"))
+
+    verdict, vtone = _verdict(regime, c.get("sentiment"), risk, levels,
+                              index_row.get("close"))
+    sent_score = float((c.get("sentiment") or {}).get("score") or 50)
+    risk_score = float(risk.get("score") or 0)
 
     return f"""
 <div class="card wide">
   <div class="card-head">
     <div>
       <div class="card-title">{_e(r.title)}</div>
-      <div class="card-sub">{_e(r.summary)}</div>
     </div>
     <div class="card-sub elapsed">耗时 {r.elapsed_ms} ms</div>
   </div>
 
-  <div class="ov-top">
-    <div class="regime {_tone_class(regime.get('tone', 'flat'))}">
-      <div class="emoji">{_e(regime.get('emoji', '➖'))}</div>
-      <div class="label">{_e(regime.get('label', '未知'))}</div>
-    </div>
-    <div class="kpis">{kpi_html}</div>
+  <div class="verdict {vtone}">
+    <div class="verdict-main">{_e(verdict)}</div>
+    <div class="verdict-sub">上证 {_e(f"{index_row.get('close', 0):.2f}")}
+      <span class="{direction}">{_e(f"{pct:+.2f}%")}</span>
+      · 涨跌 {_e(f"{breadth.get('up', 0)}/{breadth.get('down', 0)}")}
+      · 成交 {_e(_fmt_yi_amount(amount_ctx))}</div>
   </div>
 
-  <ul class="reasons">{reasons}</ul>
+  <div class="temps">
+    <div class="temp">
+      <div class="temp-head"><span>情绪强度</span><b>{sent_score:.0f}</b><i>/100</i></div>
+      <div class="bar"><i style="width:{min(sent_score,100):.0f}%"></i></div>
+      <div class="temp-foot">{_e(_score_hint(sent_score, reverse=False))}</div>
+    </div>
+    <div class="temp">
+      <div class="temp-head"><span>大跌风险</span><b>{risk_score:.0f}</b><i>/100</i></div>
+      <div class="bar risk"><i style="width:{min(risk_score,100):.0f}%"></i></div>
+      <div class="temp-foot">{_e(_score_hint(risk_score, reverse=True))}</div>
+    </div>
+  </div>
+
+  <div class="kpis compact">{kpi_html}</div>
 
   <div class="ov-grid">
     <div class="ov-col">
@@ -96,12 +150,23 @@ def _render_overview(r: ModuleResult) -> str:
       <div class="section">
         <h4>关键点位</h4>
         {levels_html}
-        <div class="card-sub" style="margin-top:8px">{_e(levels.get('note', ''))}</div>
       </div>
     </div>
   </div>
 </div>
 """
+
+
+def _score_hint(score, reverse=False):
+    """把一个 0~100 的分数翻成一句人话。"""
+    if reverse:
+        if score >= 60: return "结构拥挤，注意回撤"
+        if score >= 35: return "有一定风险"
+        return "结构健康"
+    if score >= 78: return "过热，别追"
+    if score >= 55: return "回暖中"
+    if score >= 30: return "偏冷"
+    return "冰点"
 
 
 def _fmt_yi(amount_qian) -> str:
@@ -112,7 +177,7 @@ def _fmt_yi(amount_qian) -> str:
         return "-"
 
 
-def _render_levels(levels: dict) -> str:
+def _render_levels(levels: dict, close=None) -> str:
     if not levels:
         return '<div class="state">点位数据不足</div>'
     items = [
@@ -235,7 +300,7 @@ def _render_sentiment(ctx: dict) -> str:
     total_style = f"width:{min(100, max(0, score)):.0f}%;background:{_temp_color(score)}"
     return f"""
   <div class="section">
-    <h4>情绪强度 · {head}</h4>
+    <h4>情绪强度 · 分项（{head}）</h4>
     <div class="bar"><span style="{total_style}"></span></div>
     <div class="dims">{''.join(rows)}</div>
     <div class="card-sub" style="margin-top:8px">{_e(ctx.get("note", ""))}</div>
@@ -303,7 +368,7 @@ def _render_risk(risk: dict) -> str:
     total_style = f"width:{min(100, max(0, total)):.0f}%;background:{_bar_color(total)}"
     return f"""
   <div class="section">
-    <h4>大跌风险 · {_e(risk.get('level', '-'))}（{total:.0f}/100）</h4>
+    <h4>大跌风险 · 分项</h4>
     <div class="bar"><span style="{total_style}"></span></div>
     <div class="tracks">{tracks}</div>
     <div class="dims">{''.join(dim_html)}</div>
