@@ -52,6 +52,34 @@ MA_WINDOW = 130
 BANK_KEYWORDS = ("银行",)
 
 
+def load_valuation_config():
+    """每家银行的目标 PE 和目标股息率（来自 bank-scan 的配置）。
+
+    不同银行类型给的估值锚不一样：国有大行按 5.5% 股息率、6.67 倍 PE，
+    优秀城商行放宽到 7.67 倍。这不是我定的，是「大佬刘双估值战法」的原文参数。
+    """
+    import csv
+    import os
+    path = os.path.join(os.path.dirname(__file__), "..", "..",
+                        "config", "bank_valuation.csv")
+    out = {}
+    try:
+        with open(path, encoding="utf-8") as f:
+            for row in csv.DictReader(f):
+                code = str(row.get("ts_code", "")).strip()
+                if not code:
+                    continue
+                # 配置里是 601398，数据里是 601398.SH
+                out[code] = {
+                    "type": row.get("type", ""),
+                    "target_pe": float(row.get("target_pe") or 0),
+                    "target_dv": float(row.get("target_div_yield") or 0),
+                }
+    except FileNotFoundError:
+        return {}
+    return out
+
+
 class BankModule(BaseModule):
     id = "bank"
     title = "银行专区"
@@ -104,6 +132,20 @@ class BankModule(BaseModule):
         except Exception:
             div_tbl = None
 
+        val_cfg = load_valuation_config()
+
+        # 每只银行「本年度」的每股分红（中期 + 年度合计），双估值要用
+        dividends_by_code = {}
+        if div_tbl is not None and not div_tbl.empty:
+            for c in bank_codes:
+                if c not in latest.index:
+                    continue
+                fy = int(str(latest.loc[c].get("end_date") or "")[:4] or 0)
+                if fy:
+                    d = div_kit.dps_for_year(div_tbl[div_tbl.ts_code == c], fy)
+                    if d:
+                        dividends_by_code[c] = float(d)
+
         rows: List[Candidate] = []
         stats = {"banks": len(bank_codes), "pe": 0, "yield": 0, "roe": 0, "passed": 0}
 
@@ -147,6 +189,26 @@ class BankModule(BaseModule):
             if payout is not None and payout > cfg["payout_max"]:
                 continue
 
+            # ---- 双估值法（来自 bank-scan 仓库）----
+            #   股息率估值价 = 每股分红 ÷ 目标股息率
+            #   PE 估值价   = 当年 EPS × 目标 PE
+            #   基准价      = 两者取低
+            #   买入价      = 基准价 + 即将派发的分红（除权前买能拿到这笔）
+            vcfg = val_cfg.get(code.split(".")[0]) or {}
+            dps_year = dividends_by_code.get(code)
+            base_price = buy_price = pe_price = div_price = None
+            gap_pct = None
+            if vcfg and dps_year:
+                if vcfg["target_dv"] > 0:
+                    div_price = dps_year / (vcfg["target_dv"] / 100.0)
+                eps_now = pd.to_numeric(row.get("eps"), errors="coerce")
+                if vcfg["target_pe"] > 0 and eps_now and eps_now > 0:
+                    pe_price = float(eps_now) * vcfg["target_pe"]
+                cand = [x for x in (pe_price, div_price) if x]
+                if cand:
+                    base_price = min(cand)
+                    buy_price = base_price + dps_year
+
             zone, badge = "无数据", "hold"
             price = price_adj = ma_display = None
             deviation = None
@@ -163,6 +225,8 @@ class BankModule(BaseModule):
                         deviation = (ratio - 1) * 100
                         zone, badge = classify_zone(ratio - 1, cfg["buy_ratio"],
                                                     cfg["sell_ratio"])
+                        if buy_price and price:
+                            gap_pct = (price / buy_price - 1) * 100
 
             stats["passed"] += 1
             rows.append(Candidate(
@@ -180,22 +244,32 @@ class BankModule(BaseModule):
                     "ma120": round(ma_display, 2) if ma_display else None,
                     "deviation": round(deviation, 1) if deviation is not None else None,
                     "zone": zone,
+                    "buy_price": round(buy_price, 2) if buy_price else None,
+                    "gap_pct": round(gap_pct, 1) if gap_pct is not None else None,
+                    "bank_type": vcfg.get("type", ""),
                 },
                 reasons=[f"PE {pe:.1f}", f"股息率 {dv:.2f}%", f"ROE {roe*100:.1f}%"],
                 risks=[f"派息率 {payout*100:.0f}% 偏低" if payout and payout < 0.30 else ""]
                       if payout and payout < 0.30 else [],
-                badges=[badge],
+                badges=([badge] + (
+                    [f"低于买点 {abs(gap_pct):.1f}%"] if gap_pct is not None and gap_pct <= 0
+                    else [f"还需跌 {gap_pct:.1f}%"] if gap_pct is not None
+                    else [])),
             ))
 
         rows.sort(key=lambda r: r.metrics.get("deviation") or 999)
         cap = int(cfg.get("max_candidates", 20))
         rows = rows[:cap]
         buy = sum(1 for r in rows if r.metrics["zone"] == "买入区")
+        # 双估值口径：现价已低于「双估值买入价」的只数
+        in_range = sum(1 for r in rows
+                       if r.metrics.get("gap_pct") is not None
+                       and r.metrics["gap_pct"] <= 0)
 
         return {
             "status": STATUS_OK,
-            "summary": (f"银行 {stats['banks']} 只 · 通过 {stats['passed']} 只，"
-                        f"买入区 {buy} 只（ROE 门槛按银行口径取 8%）"),
+            "summary": (f"银行 {stats['banks']} 只 · 通过 {stats['passed']} 只 · "
+                        f"双估值已到位 {in_range} 只 · MA120 买入区 {buy} 只"),
             "candidates": rows,
             "context": {"thresholds": cfg, "funnel": stats},
         }
