@@ -80,6 +80,48 @@ def load_valuation_config():
     return out
 
 
+
+# ---------------- 综合评分 ----------------
+# 两套逻辑本身是互斥的：
+#   双估值说「按目标 PE/股息率算，现价便宜」——不看股价走到哪了
+#   MA120/位置说「相对自己过去一年，现在在高位」——不看绝对估值
+# 护盘行情下两者会同时成立，直接并排展示等于把矛盾丢给用户。
+#
+# 这里把它们融成一个分：
+#   估值分 = 现价低于双估值买点的幅度（越低于买点越高）
+#   位置分 = 一年区间的低位程度（越低位越高）
+#   趋势分 = 近 3 月涨幅的反向（涨得越多越低）
+# 权重是我的选择，没有文献依据，写在这里是为了将来可以调：
+# 估值占 45%（双估值是方法主体），位置占 40%（用户实测高位误报最致命），
+# 趋势占 15%（只做辅助，避免把追涨的标的打得太低）。
+WEIGHT_VALUE = 0.45
+WEIGHT_POSITION = 0.40
+WEIGHT_TREND = 0.15
+
+# 现价低于买点 25% 就算估值满分
+VALUE_FULL_AT = 0.25
+# 近 3 月涨 30% 就算趋势零分
+TREND_ZERO_AT = 30.0
+
+
+def score_components(buy_price, price, yr_position, chg_3m):
+    """返回 (综合分, 估值分, 位置分, 趋势分)，缺数据的分项按中性 50 计。"""
+    value = 50.0
+    if buy_price and price and buy_price > 0:
+        discount = buy_price / price - 1.0          # 现价比买点低多少
+        value = max(0.0, min(1.0, discount / VALUE_FULL_AT)) * 100.0
+    position = 50.0
+    if yr_position is not None:
+        position = max(0.0, min(1.0, 1.0 - yr_position / 100.0)) * 100.0
+    trend = 50.0
+    if chg_3m is not None:
+        trend = max(0.0, min(1.0, 1.0 - chg_3m / TREND_ZERO_AT)) * 100.0
+    total = (value * WEIGHT_VALUE
+             + position * WEIGHT_POSITION
+             + trend * WEIGHT_TREND)
+    return round(total, 1), round(value, 1), round(position, 1), round(trend, 1)
+
+
 class BankModule(BaseModule):
     id = "bank"
     title = "银行专区"
@@ -239,11 +281,14 @@ class BankModule(BaseModule):
                         if len(series) > 63:
                             chg_3m = (price_adj / float(series.iloc[-63]) - 1) * 100
 
+            total_score, v_s, p_s, t_s = score_components(
+                buy_price, price, yr_position, chg_3m)
+
             stats["passed"] += 1
             rows.append(Candidate(
                 code=code,
                 name=str(meta.loc[code].get("name", "")),
-                score=round(-(deviation or 0), 2),
+                score=total_score,
                 industry=str(meta.loc[code].get("industry", "")),
                 metrics={
                     "pe": round(float(pe), 2),
@@ -263,6 +308,9 @@ class BankModule(BaseModule):
                     # 但护盘行情里股价是台阶式抬升的，偏离均线并不大，
                     # 位置却已经到顶——那个附加条件会让高位标的漏判。
                     "overheated": bool(yr_position is not None and yr_position >= 85),
+                    "score_value": v_s,
+                    "score_position": p_s,
+                    "score_trend": t_s,
                     "bank_type": vcfg.get("type", ""),
                 },
                 reasons=[f"PE {pe:.1f}", f"股息率 {dv:.2f}%", f"ROE {roe*100:.1f}%"],
@@ -276,7 +324,7 @@ class BankModule(BaseModule):
                        and yr_position >= 80 else [])),
             ))
 
-        rows.sort(key=lambda r: r.metrics.get("deviation") or 999)
+        rows.sort(key=lambda r: r.score, reverse=True)
         cap = int(cfg.get("max_candidates", 20))
         rows = rows[:cap]
         buy = sum(1 for r in rows if r.metrics["zone"] == "买入区")
