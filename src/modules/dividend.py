@@ -121,6 +121,13 @@ class DividendModule(BaseModule):
         try:
             cf = _latest("cashflow")
             inc = _latest("income")
+            # cashflow_vip 拉不全（单次行数上限），缺的那部分由
+            # fetch_cashflow_income 逐只补进 cashflow_extra（按代码存）。
+            extra = ctx.store.read_dated("cashflow_extra")
+            if cf is not None and extra is not None and not extra.empty:
+                keep = [c for c in cf.columns if c in extra.columns]
+                cf = pd.concat([cf[keep], extra[keep]], ignore_index=True)
+                cf = cf.drop_duplicates("ts_code", keep="last")
         except Exception:
             return {}
         if cf is None or inc is None or cf.empty or inc.empty:
