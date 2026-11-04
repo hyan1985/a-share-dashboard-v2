@@ -398,11 +398,15 @@ class BankModule(BaseModule):
                        and yr_position >= 80 else [])),
             ))
 
-        # 排序：盈亏比优先（None 表示现价已低于支撑，视为最好），
-        # 其次看位置分。
+        # 排序按「确定的事实」，不按预测。
+        # 原因：tools/backtest_bank_rr.py 测过，盈亏比 >1 的 120 日胜率
+        # 只比全样本高 0.5 个百分点（55.1% vs 54.6%），分年度在 35%~90%
+        # 之间乱跳，被市场环境主导。IC 0.104 看着显著，实际不可交易。
+        # 所以排序改成股息率（确定的现金流）优先，ROE 次之。
+        # 盈亏比仍然展示，但只作参考。
         rows.sort(key=lambda r: (
-            -(r.metrics.get("risk_reward") if r.metrics.get("risk_reward") is not None else 999),
-            -r.score,
+            -(r.metrics.get("dv") or 0),
+            -(r.metrics.get("roe") or 0),
         ))
         cap = int(cfg.get("max_candidates", 20))
         rows = rows[:cap]
@@ -415,7 +419,7 @@ class BankModule(BaseModule):
             "summary": (f"银行 {stats['banks']} 只 · 通过 {stats['passed']} 只 · "
                         f"基本面过关 {stats['passed']} 只"
                         + (f"（{rejected} 只因估值撑不住基本面被剔除）" if rejected else "")
-                        + "，按盈亏比（位置）排序"),
+                        + "，按股息率排序（不按盈亏比——见 README 的回测结论）"),
             "candidates": rows,
             "context": {"thresholds": cfg, "funnel": stats},
         }
