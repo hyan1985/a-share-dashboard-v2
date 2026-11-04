@@ -171,6 +171,7 @@ def fetch_financials(client, store: ParquetStore, trade_date_compact: str,
 
 
 CASHFLOW_API = "cashflow_vip"
+FILL_BATCH = 300        # 每轮最多逐只补多少只
 INCOME_API = "income_vip"
 
 
@@ -208,6 +209,29 @@ def fetch_cashflow_income(client, store: ParquetStore, trade_date_compact: str,
             out[table] += 1
             if verbose:
                 print(f"  → {table} {period}: {len(df)} 行")
+    # cashflow_vip 单次返回有行数上限（实测 6400 行、只有 4403 只股票），
+    # 全市场有 1500 多只拉不到。这里对缺失的代码逐只补，限一个批次，
+    # 剩下的留给下次运行——分红缓存那套「按需补」的思路。
+    try:
+        meta = store.read_single("stock_basic")
+        all_codes = set(meta["ts_code"]) if "ts_code" in meta.columns else set()
+        cf = store.read_dated("cashflow", [periods[-1]]) if periods else None
+        have = set(cf["ts_code"]) if cf is not None and not cf.empty else set()
+        missing = sorted(all_codes - have)[:FILL_BATCH]
+        if missing and verbose:
+            print(f"  → 收现比补缺：{len(missing)} 只（本轮上限 {FILL_BATCH}）")
+        for code in missing:
+            try:
+                df = client.query("cashflow", ts_code=code,
+                                  fields="ts_code,end_date,c_fr_sale_sg,n_cashflow_act")
+            except Exception:
+                continue
+            if df is None or df.empty:
+                continue
+            store.write_dated("cashflow_extra", code, df)
+            out["filled"] = out.get("filled", 0) + 1
+    except Exception:
+        pass
     return out
 
 
