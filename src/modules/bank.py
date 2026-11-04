@@ -118,6 +118,30 @@ VALUE_FULL_AT = 0.25
 TREND_ZERO_AT = 30.0
 
 
+def risk_reward(price, support, target):
+    """盈亏比 = 上行空间 ÷ 下行空间。
+
+    support（支撑价）：双估值买点——基本面撑得住的价格，跌破它说明
+                       要么基本面变坏，要么市场给了更好的价。
+    target（目标价）：近一年高点——过去的阻力位。
+
+    返回 (盈亏比, 上行%, 下行%)。
+      上行% = (target - price) / price
+      下行% = (price - support) / price
+    现价已低于支撑价时下行记为 0（买在支撑下方，理论下行有限），
+    盈亏比给 None 表示「无下行风险」，避免除零后显示成 999。
+    """
+    if not price or price <= 0 or not support or not target:
+        return None, None, None
+    up = (target - price) / price * 100.0
+    down = (price - support) / price * 100.0
+    if down <= 0:
+        return None, round(up, 1), 0.0
+    if up <= 0:
+        return 0.0, round(up, 1), round(down, 1)
+    return round(up / down, 2), round(up, 1), round(down, 1)
+
+
 def fundamentals_ok(buy_price, price):
     """基本面门槛：现价有没有超出双估值买点太多。
 
@@ -315,6 +339,18 @@ class BankModule(BaseModule):
             if not fund_ok:
                 stats["rejected_fundamentals"] = stats.get("rejected_fundamentals", 0) + 1
                 continue
+            # 盈亏比：支撑=双估值买点，目标=近一年高点
+            # 支撑价用 MA120 而不是双估值买点。双估值买点几乎总在市价上方
+            # （这是它「便宜」的定义），拿来当下行支撑会让所有标的的下行都算成 0，
+            # 盈亏比全部退化。MA120 是市场真正守过的位置，跌破才算趋势走坏。
+            support = price / (1.0 + (deviation or 0) / 100.0) if deviation is not None else None
+            # 目标价必须和现价同尺度：series 是复权价，price 是真实价。
+            # 直接取复权高点会和真实价比出 567% 这种荒谬结果。
+            # 用比例换算：target_raw = price × (adj_high / adj_price)
+            target = None
+            if len(series) and price_adj and price_adj > 0:
+                target = price * (float(series.tail(250).max()) / price_adj)
+            rr, up_pct, down_pct = risk_reward(price, support, target)
             total_score, v_s, p_s, t_s = score_components(
                 buy_price, price, yr_position, chg_3m)
 
@@ -342,6 +378,9 @@ class BankModule(BaseModule):
                     # 但护盘行情里股价是台阶式抬升的，偏离均线并不大，
                     # 位置却已经到顶——那个附加条件会让高位标的漏判。
                     "overheated": bool(yr_position is not None and yr_position >= 85),
+                    "risk_reward": rr,
+                    "upside": up_pct,
+                    "downside": down_pct,
                     "score_value": v_s,
                     "valuation_premium": round(premium, 1) if premium is not None else None,
                     "score_position": p_s,
@@ -359,7 +398,12 @@ class BankModule(BaseModule):
                        and yr_position >= 80 else [])),
             ))
 
-        rows.sort(key=lambda r: r.score, reverse=True)
+        # 排序：盈亏比优先（None 表示现价已低于支撑，视为最好），
+        # 其次看位置分。
+        rows.sort(key=lambda r: (
+            -(r.metrics.get("risk_reward") if r.metrics.get("risk_reward") is not None else 999),
+            -r.score,
+        ))
         cap = int(cfg.get("max_candidates", 20))
         rows = rows[:cap]
         buy = sum(1 for r in rows if r.metrics["zone"] == "买入区")
