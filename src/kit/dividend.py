@@ -14,9 +14,16 @@ IMPLEMENTED = "实施"
 
 def _cash(df: pd.DataFrame) -> pd.Series:
     """优先用税前每股派现，缺失时退回税后。"""
-    cash = pd.to_numeric(df.get("cash_div"), errors="coerce")
+    # tushare 的 cash_div（税前）经常是 0 而不是空值，
+    # 原来的 fillna 修不了 0，会把有效分红当成 0 丢掉
+    # （成都银行 20251231: cash_div=0, cash_div_tax=0.921）。
+    # 改成「cash_div 取不到正数时退回 cash_div_tax」。
+    pre = pd.to_numeric(df.get("cash_div"), errors="coerce")
     if "cash_div_tax" in df.columns:
-        cash = cash.fillna(pd.to_numeric(df["cash_div_tax"], errors="coerce"))
+        post = pd.to_numeric(df["cash_div_tax"], errors="coerce")
+        cash = pre.where(pre > 0, post)
+    else:
+        cash = pre
     return cash.fillna(0.0)
 
 
