@@ -496,6 +496,25 @@ def _render_screener(r: ModuleResult) -> str:
         <td><div class="reason">{reasons}</div>{f'<div class="risk">{risks}</div>' if risks else ''}</td>
       </tr>""")
 
+    # 未通过门槛的也列出来，附原因。否则「为什么建行不在名单里」
+    # 页面上永远查不到——而被筛掉的往往正是涨上去、股息率跌下来的那些。
+    excluded = (r.context or {}).get("excluded") or []
+    excluded_html = ""
+    if excluded:
+        cells = "".join(
+            f'<tr><td>{_e(x["name"])}</td><td class="code">{_e(x["code"])}</td>'
+            f'<td>{_e(x["reason"])}</td></tr>'
+            for x in excluded[:40]
+        )
+        excluded_html = f"""
+  <details class="excluded">
+    <summary>未通过门槛的 {len(excluded)} 只（点开看原因）</summary>
+    <div class="table-wrap"><table>
+      <thead><tr><th>标的</th><th>代码</th><th>卡在哪</th></tr></thead>
+      <tbody>{cells}</tbody>
+    </table></div>
+  </details>"""
+
     return f"""
 <div class="card">
   {head}
@@ -509,6 +528,7 @@ def _render_screener(r: ModuleResult) -> str:
       <tbody>{''.join(rows)}</tbody>
     </table>
   </div>
+  {excluded_html}
 </div>
 """
 
