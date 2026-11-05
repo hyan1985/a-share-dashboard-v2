@@ -74,6 +74,12 @@ def dps_for_year(df: pd.DataFrame, year: int) -> Optional[float]:
     # 只取 1231 会漏掉中期分红，派息率会算成实际的一半——
     # 招商银行就是这样算出 17.6%（真实 35%）的。
     part = rows[rows["_year"] == int(year)]
+    # 但同一笔分红可能在 tushare 里存在多条实施记录（公告日不同、金额相同），
+    # 直接 sum 会翻倍。成都银行 2022/2023 年就是这样。
+    # 按 (end_date, 金额) 去重，保留最早公告的那条。
+    if not part.empty:
+        part = (part.sort_values("ann_date" if "ann_date" in part.columns else "end_date")
+                    .drop_duplicates(subset=["end_date", "_cash"], keep="first"))
     if part.empty:
         return None
     return float(part["_cash"].sum())
