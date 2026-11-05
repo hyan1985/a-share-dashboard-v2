@@ -11,6 +11,14 @@ import pandas as pd
 
 IMPLEMENTED = "实施"
 
+# 分红进度优先级（来自 bank-scan 的做法）：同一笔分红可能出现多条
+# 不同状态的记录，越靠后越接近最终执行，取值应以它为准。
+DIV_PROC_RANK = {
+    "预案": 1, "预披露": 1, "董事会预案": 1,
+    "股东大会通过": 2, "股东大会否决": 0,
+    "实施": 3, "取消分红": 0,
+}
+
 
 def _cash(df: pd.DataFrame) -> pd.Series:
     """优先用税前每股派现，缺失时退回税后。"""
@@ -81,12 +89,19 @@ def dps_for_year(df: pd.DataFrame, year: int) -> Optional[float]:
     # 只取 1231 会漏掉中期分红，派息率会算成实际的一半——
     # 招商银行就是这样算出 17.6%（真实 35%）的。
     part = rows[rows["_year"] == int(year)]
-    # 但同一笔分红可能在 tushare 里存在多条实施记录（公告日不同、金额相同），
-    # 直接 sum 会翻倍。成都银行 2022/2023 年就是这样。
-    # 按 (end_date, 金额) 去重，保留最早公告的那条。
+    # 同一个 end_date 可能是同一笔分红的多次记录（重复入库、方案调整）。
+    # 按「进度优先级 → 公告日最晚」只留一条：
+    #   - 按 end_date 去重而不是按金额——金额被调整过时不会重复累加
+    #   - 取公告日最晚的，方案调整后以最终公告为准
+    # 这套去重方式来自 bank-scan 的 dps_recent_fiscal_year。
     if not part.empty:
-        part = (part.sort_values("ann_date" if "ann_date" in part.columns else "end_date")
-                    .drop_duplicates(subset=["end_date", "_cash"], keep="first"))
+        pri = (part["div_proc"].map(DIV_PROC_RANK).fillna(0)
+               if "div_proc" in part.columns else 0)
+        ann = (part["ann_date"].astype(str) if "ann_date" in part.columns
+               else part["end_date"].astype(str))
+        part = (part.assign(_pri=pri, _ann=ann)
+                    .sort_values(["_pri", "_ann"], ascending=False)
+                    .drop_duplicates(subset=["end_date"], keep="first"))
     if part.empty:
         return None
     return float(part["_cash"].sum())
