@@ -440,3 +440,13 @@ table th, table td { padding: 9px 12px; line-height: 1.6; }
 .chip.good { color: #4caf82; border-color: rgba(76,175,130,.35); background: rgba(76,175,130,.08); }
 .chip.warn { color: #e0a83a; border-color: rgba(224,168,58,.35); background: rgba(224,168,58,.08); }
 .chip.bad  { color: #e0663a; border-color: rgba(224,102,58,.35); background: rgba(224,102,58,.08); }
+
+/* 分项说明：一句话讲清这个分数越高是好事还是坏事 */
+.hint {
+  font-size: 12.5px; color: var(--muted); line-height: 1.65;
+  margin: 0 0 14px; padding: 9px 12px; border-radius: 8px;
+  background: rgba(255,255,255,.025);
+}
+.hint b { color: var(--fg); font-weight: 600; }
+.dim i { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.dim i small { opacity: .55; }
