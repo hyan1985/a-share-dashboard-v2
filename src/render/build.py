@@ -499,6 +499,8 @@ def _render_screener(r: ModuleResult) -> str:
     return f"""
 <div class="card">
   {head}
+  <p class="legend">标签是盈亏比：上行空间（到近一年高点）÷ 下行空间（到半年线）。
+    「上行空间小」= 涨的空间小于跌的空间，<b>不代表绝对价格贵</b>。</p>
   <div class="table-wrap">
     <table>
       <thead><tr><th>标的</th><th>股息率</th><th>关键指标</th><th>理由 / 风险</th></tr></thead>
