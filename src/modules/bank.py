@@ -407,7 +407,10 @@ class BankModule(BaseModule):
                 # 标签用盈亏比口径。原来用的是 MA120 的 buy/hold——
                 # 那是「价格低于半年线」的意思，和位置分（越高越好）方向相反，
                 # 会出现「评分 0 分却标 buy」这种自相矛盾的展示。
-                badges=([_rr_label(rr)]
+                # 标签直接给数字，不用「上行空间小」这种还要解释的说法：
+                # ↑x% 是涨到近一年高点能赚多少，↓y% 是跌到半年线会亏多少。
+                badges=(([f"↑{up_pct:.1f}% ↓{down_pct:.1f}%"]
+                         if up_pct is not None and down_pct is not None else [])
                         + ([f"低于买点 {abs(gap_pct):.1f}%"] if gap_pct is not None and gap_pct <= 0
                            else [f"还需跌 {gap_pct:.1f}%"] if gap_pct is not None
                            else [])),
