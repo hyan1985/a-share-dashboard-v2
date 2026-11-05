@@ -499,8 +499,10 @@ def _render_screener(r: ModuleResult) -> str:
     return f"""
 <div class="card">
   {head}
-  <p class="legend"><b>↑</b> 涨到近一年高点能赚多少 · <b>↓</b> 跌到半年线会亏多少
-    · <b>低于买点</b> 是现价相对双估值买点。</p>
+  <p class="legend"><b>股息率</b> 按最近一个完整财年（年度+中期）算 ÷ 现价，
+    不用 TTM——TTM 遇到首次改半年派的公司会虚高（成都银行 TTM 7.4%、财年 4.8%）。
+    · <b>↑↓</b> 涨到近一年高点能赚多少 / 跌到半年线会亏多少
+    · <b>低于买点</b> 现价相对双估值买点。</p>
   <div class="table-wrap">
     <table>
       <thead><tr><th>标的</th><th>股息率</th><th>关键指标</th><th>理由 / 风险</th></tr></thead>
