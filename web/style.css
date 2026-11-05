@@ -435,3 +435,8 @@ table th, table td { padding: 9px 12px; line-height: 1.6; }
   .temps { grid-template-columns: 1fr; }
   .verdict-main { font-size: 17px; }
 }
+
+/* 右上角数据状态：一眼看出数据是不是齐的、是不是最新 */
+.chip.good { color: #4caf82; border-color: rgba(76,175,130,.35); background: rgba(76,175,130,.08); }
+.chip.warn { color: #e0a83a; border-color: rgba(224,168,58,.35); background: rgba(224,168,58,.08); }
+.chip.bad  { color: #e0663a; border-color: rgba(224,102,58,.35); background: rgba(224,102,58,.08); }
