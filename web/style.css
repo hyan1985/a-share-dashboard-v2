@@ -393,7 +393,13 @@ ul.why.caveat li::marker{color:var(--warm)}
 
 /* 分位条更粗、更容易读出位置 */
 .bar { height: 7px; border-radius: 999px; }
-.bar > i { border-radius: 999px; }
+.bar > i {
+  display: block; height: 100%; border-radius: 999px;
+  /* 温度计里的进度条用的是 <i>，原来只给 span 定义了填充色，
+     结果两条都是空轨——页面上什么也看不到。 */
+  background: linear-gradient(90deg, var(--good), var(--warm), var(--hot));
+}
+.bar > span { border-radius: 999px; }
 
 /* 表格：等宽数字 + 更松的行距 */
 table { font-variant-numeric: tabular-nums; }
