@@ -510,6 +510,46 @@ def _state_block(r: ModuleResult) -> str:
 
 
 # ---------------- 组装 ----------------
+
+def _data_status(results, trade_date):
+    """右上角的数据状态：模块是否都拿到了数据、数据滞后几天。
+
+    这几项原来完全没显示——页面看起来正常，但底下可能是 stale，
+    或者数据停在几天前。用户没法从页面上看出来。
+    """
+    from datetime import date, datetime
+
+    total = len(results)
+    ok = sum(1 for r in results if r.status == "ok")
+    stale = [r.title for r in results if r.status == "stale"]
+    err = [r.title for r in results if r.status == "error"]
+
+    parts = []
+    if err:
+        parts.append(f"{len(err)} 个出错")
+        cls = "bad"
+    elif stale:
+        parts.append(f"{len(stale)} 个数据不足")
+        cls = "warn"
+    else:
+        parts.append(f"{ok}/{total} 模块正常")
+        cls = "good"
+
+    # 数据滞后：交易日距今天几个自然日
+    try:
+        td = datetime.strptime(str(trade_date), "%Y%m%d").date()
+        gap = (date.today() - td).days
+        if gap >= 1:
+            weekend = gap <= 3
+            parts.append(f"数据 {td:%m-%d}" + ("" if weekend else f"，滞后 {gap} 天"))
+            if gap > 3:
+                cls = "warn"
+    except Exception:
+        pass
+
+    return " · ".join(parts), cls
+
+
 def render(results: List[ModuleResult], trade_date: str,
            generated_at: Optional[str] = None) -> str:
     generated_at = generated_at or datetime.now().strftime("%Y-%m-%d %H:%M")
@@ -523,6 +563,8 @@ def render(results: List[ModuleResult], trade_date: str,
                       for r in overview)
     if screeners:
         content += _render_tabs(screeners)
+
+    status_text, status_cls = _data_status(results, trade_date)
 
     data = {
         "trade_date": trade_date,
@@ -538,6 +580,8 @@ def render(results: List[ModuleResult], trade_date: str,
         .replace("{{STYLE}}", style)
         .replace("{{CONTENT}}", content)
         .replace("{{TRADE_DATE}}", trade_date)
+        .replace("{{STATUS_TEXT}}", status_text)
+        .replace("{{STATUS_CLASS}}", status_cls)
         .replace("{{GENERATED_AT}}", generated_at)
         .replace("{{DATA}}", payload)
     )
