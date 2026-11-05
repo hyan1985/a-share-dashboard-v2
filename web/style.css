@@ -456,3 +456,11 @@ table th, table td { padding: 9px 12px; line-height: 1.6; }
 .hint b { color: var(--fg); font-weight: 600; }
 .dim i { font-variant-numeric: tabular-nums; white-space: nowrap; }
 .dim i small { opacity: .55; }
+
+/* 表格上方的口径说明：避免「便宜」和「上行空间小」看起来矛盾 */
+.legend {
+  font-size: 12.5px; color: var(--muted); line-height: 1.7;
+  margin: -4px 0 12px; padding: 9px 12px; border-radius: 8px;
+  background: rgba(255,255,255,.025);
+}
+.legend b { color: var(--fg); }
