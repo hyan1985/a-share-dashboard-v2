@@ -145,12 +145,12 @@ def risk_reward(price, support, target):
 def _rr_label(rr):
     """盈亏比 → 一句人话标签。"""
     if rr is None:
-        return "下行有限"
+        return "已在支撑下方"
     if rr >= 1.5:
-        return "性价比高"
+        return "上行空间大"
     if rr >= 1.0:
-        return "尚可"
-    return "空间不足"
+        return "涨跌空间相当"
+    return "上行空间小"
 
 
 def fundamentals_ok(buy_price, price):
