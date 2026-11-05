@@ -1,5 +1,10 @@
 # A股看板
 
+[![每日更新](https://github.com/hyan1985/a-share-dashboard-v2/actions/workflows/daily.yml/badge.svg)](https://github.com/hyan1985/a-share-dashboard-v2/actions/workflows/daily.yml)
+[![在线看板](https://img.shields.io/badge/%E5%9C%A8%E7%BA%BF%E7%9C%8B%E6%9D%BF-%E7%82%B9%E5%87%BB%E6%89%93%E5%BC%80-4aa3d8)](https://hyan1985.github.io/a-share-dashboard-v2/)
+[![测试](https://img.shields.io/badge/tests-131%20passed-4caf82)](https://github.com/hyan1985/a-share-dashboard-v2)
+[![Python](https://img.shields.io/badge/python-3.9%2B-3776ab)](https://www.python.org/)
+
 两个页面，解决两个问题：**今天市场什么状态**、**哪些红利股到了该买的位置**。
 
 本地跑、不需要服务器：
