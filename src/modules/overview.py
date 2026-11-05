@@ -606,7 +606,7 @@ class OverviewModule(BaseModule):
         # 承接位 = 最近的下方簇（第一道防线，看的是反应速度）
         support = below[0] if below else None
 
-        # 破位位 = 承接位下方权重最高的簇（最后一道防线，跌破即趋势破坏）。
+        # 破位 = 承接位下方权重最高的簇（最后一道防线，跌破即趋势破坏）。
         # 必须严格低于承接位，否则"破位"会排到"承接"上方，语义是错的。
         rest = [c for c in below if support and c["price"] < support["price"]]
         breakdown = max(rest, key=lambda c: c["weight"]) if rest else None
@@ -617,7 +617,7 @@ class OverviewModule(BaseModule):
             "support": pack(support),
             "breakdown": pack(breakdown),
             "note": "均线 / 摆动高低点 / 自算筹码峰 / 未回补缺口 / 整数关口，"
-                    "按类型加权聚类；承接位取最近、破位位取下方最强；历史验证样本量待补",
+                    "按类型加权聚类；承接取最近、破位取下方最强；历史验证样本量待补",
         }
 
     @staticmethod
