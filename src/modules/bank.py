@@ -256,15 +256,31 @@ class BankModule(BaseModule):
 
         rows: List[Candidate] = []
         stats = {"banks": len(bank_codes), "pe": 0, "yield": 0, "roe": 0, "passed": 0}
+        # 没通过门槛的也要展示出来，并写明是哪一条卡住的。
+        # 否则「为什么建行不在列表里」这种问题页面上永远查不到——
+        # 而被筛掉的往往正是涨上去、股息率跌下来的那些，用户最想看的。
+        excluded = []
+
+        def _drop(code, name, reason, pe=None, dv=None, roe=None):
+            excluded.append({
+                "code": code, "name": name, "reason": reason,
+                "pe": round(float(pe), 2) if pe is not None and pd.notna(pe) else None,
+                "dv": round(float(dv), 2) if dv is not None and pd.notna(dv) else None,
+                "roe": round(float(roe) * 100, 1) if roe else None,
+            })
 
         for code in bank_codes:
+            _name = str(meta.loc[code].get("name", "")) if code in meta.index else code
             s = snap[snap.ts_code == code].iloc[0]
             pe = pd.to_numeric(s.get("pe_ttm"), errors="coerce")
             dv = pd.to_numeric(s.get("dv_ttm"), errors="coerce")
             if pd.isna(pe) or pd.isna(dv) or pe <= 0 or pe > cfg["pe_max"]:
+                _drop(code, _name, f"PE {pe:.1f} > {cfg['pe_max']:.0f}" if pd.notna(pe) else "缺 PE",
+                      pe, dv)
                 continue
             stats["pe"] += 1
             if dv / 100.0 < cfg["yield_min"]:
+                _drop(code, _name, f"股息率 {dv:.2f}% < {cfg['yield_min']*100:.0f}%", pe, dv)
                 continue
             stats["yield"] += 1
 
@@ -273,6 +289,8 @@ class BankModule(BaseModule):
             row = latest.loc[code]
             roe = fin_kit.norm_ratio(row.get("roe"))
             if roe is None or roe < cfg["roe_min"]:
+                _drop(code, _name, f"ROE {(roe or 0)*100:.1f}% < {cfg['roe_min']*100:.0f}%",
+                      pe, dv, roe)
                 continue
             stats["roe"] += 1
 
@@ -290,6 +308,8 @@ class BankModule(BaseModule):
                         payout = float(dps) / float(eps)
 
             if streak and streak < cfg["dividend_years_min"]:
+                _drop(code, _name, f"连续分红 {streak} 年 < {cfg['dividend_years_min']}",
+                      pe, dv, roe)
                 continue
             # 派息率只挡 >100%（文章原文的「警惕线」：在吃老本不可持续）。
             # 70~100% 不加硬筛——高派息率是「现金奶牛」的特征，正是要找的。
@@ -356,6 +376,7 @@ class BankModule(BaseModule):
             fund_ok, premium = fundamentals_ok(buy_price, price)
             if not fund_ok:
                 stats["rejected_fundamentals"] = stats.get("rejected_fundamentals", 0) + 1
+                _drop(code, _name, f"现价高于双估值买点 {premium:.0f}%", pe, dv, roe)
                 continue
             # 盈亏比：支撑=双估值买点，目标=近一年高点
             # 支撑价用 MA120 而不是双估值买点。双估值买点几乎总在市价上方
@@ -453,7 +474,8 @@ class BankModule(BaseModule):
                         + (f"（{rejected} 只因估值撑不住基本面被剔除）" if rejected else "")
                         + "，按股息率排序（不按盈亏比——见 README 的回测结论）"),
             "candidates": rows,
-            "context": {"thresholds": cfg, "funnel": stats},
+            "context": {"thresholds": cfg, "funnel": stats,
+                        "excluded": sorted(excluded, key=lambda x: x["name"])},
         }
 
 
