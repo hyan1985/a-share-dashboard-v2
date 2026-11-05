@@ -121,7 +121,7 @@ def _render_overview(r: ModuleResult) -> str:
 
   <div class="temps">
     <div class="temp">
-      <div class="temp-head"><span>情绪强度</span><b>{sent_score:.0f}</b><i>/100</i></div>
+      <div class="temp-head"><span>市场热度</span><b>{sent_score:.0f}</b><i>/100</i></div>
       <div class="bar"><i style="width:{min(sent_score,100):.0f}%"></i></div>
       <div class="temp-foot">{_e(_score_hint(sent_score, reverse=False))}</div>
     </div>
@@ -287,11 +287,15 @@ def _render_sentiment(ctx: dict) -> str:
                 f'<i>数据缺失</i></div>')
             continue
         value = float(comp.get("score") or 0)
+        weight = float(comp.get("weight") or 0)
+        # 显示「拿到多少分 / 满分多少」而不是「0~100 的分数 · 权重%」。
+        # 原来写「65 · 20%」，用户读成「65 分，满分 20」，完全对不上。
+        got = value * weight / 100.0
         rows.append(
             f'<div class="dim"><span>{_e(comp.get("label", ""))}</span>'
             f'<div class="bar"><span style="width:{min(100, max(0, value)):.0f}%;'
             f'background:{_temp_color(value)}"></span></div>'
-            f'<i>{value:.0f}<small> · {comp.get("weight", 0):.0f}%</small></i></div>')
+            f'<i>{got:.1f}<small>/{weight:.0f}</small></i></div>')
 
     head = f"{score:.0f}/100"
     if percentile is not None:
@@ -300,7 +304,9 @@ def _render_sentiment(ctx: dict) -> str:
     total_style = f"width:{min(100, max(0, score)):.0f}%;background:{_temp_color(score)}"
     return f"""
   <div class="section">
-    <h4>情绪强度 · 分项（{head}）</h4>
+    <h4>市场热度 · {head}</h4>
+    <p class="hint">越高 = 市场越热。<b>不是越高越好</b>——过热时追高容易亏；
+      冰点附近才有便宜筹码。这里只描述温度，不预测方向。</p>
     <div class="bar"><span style="{total_style}"></span></div>
     <div class="dims">{''.join(rows)}</div>
     <div class="card-sub" style="margin-top:8px">{_e(ctx.get("note", ""))}</div>
@@ -362,13 +368,17 @@ def _render_risk(risk: dict) -> str:
             f'<div class="dim"><span>{_e(dim.get("label", ""))}</span>'
             f'<div class="bar"><span style="width:{pct:.0f}%;'
             f'background:{_bar_color(pct)}"></span></div>'
-            f'<i>{score:.0f}<small> · {maximum:.0f} 满分</small></i></div>')
+            # 和上面的情绪分项统一：「拿到多少 / 满分多少」
+            f'<i>{score:.1f}<small>/{maximum:.0f}</small></i></div>')
 
     sig_html = "".join(f"<li>{_e(x)}</li>" for x in signals)
     total_style = f"width:{min(100, max(0, total)):.0f}%;background:{_bar_color(total)}"
     return f"""
   <div class="section">
-    <h4>大跌风险 · 分项</h4>
+    <h4>大跌风险 · {total:.0f}/100</h4>
+    <p class="hint">越高 = 越危险。<b>这个才是越高越差</b>——
+      结构拥挤（资金挤在少数票）和破位风险（跌破关键位）同时升高时，
+      短期回撤概率明显变大。</p>
     <div class="bar"><span style="{total_style}"></span></div>
     <div class="tracks">{tracks}</div>
     <div class="dims">{''.join(dim_html)}</div>
