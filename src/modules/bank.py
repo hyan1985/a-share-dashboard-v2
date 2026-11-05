@@ -142,6 +142,17 @@ def risk_reward(price, support, target):
     return round(up / down, 2), round(up, 1), round(down, 1)
 
 
+def _rr_label(rr):
+    """盈亏比 → 一句人话标签。"""
+    if rr is None:
+        return "下行有限"
+    if rr >= 1.5:
+        return "性价比高"
+    if rr >= 1.0:
+        return "尚可"
+    return "空间不足"
+
+
 def fundamentals_ok(buy_price, price):
     """基本面门槛：现价有没有超出双估值买点太多。
 
@@ -358,7 +369,10 @@ class BankModule(BaseModule):
             rows.append(Candidate(
                 code=code,
                 name=str(meta.loc[code].get("name", "")),
-                score=total_score,
+                # score 字段用于表格展示，这里放排序键（股息率），
+                # 不放综合分——综合分既不参与排序，又和标签口径不一致，
+                # 展示出来只会让人困惑（出现过「0 分却标 buy」）。
+                score=float(dv),
                 industry=str(meta.loc[code].get("industry", "")),
                 metrics={
                     "pe": round(float(pe), 2),
@@ -390,12 +404,13 @@ class BankModule(BaseModule):
                 reasons=[f"PE {pe:.1f}", f"股息率 {dv:.2f}%", f"ROE {roe*100:.1f}%"],
                 risks=[f"派息率 {payout*100:.0f}% 偏低" if payout and payout < 0.30 else ""]
                       if payout and payout < 0.30 else [],
-                badges=([badge] + (
-                    [f"低于买点 {abs(gap_pct):.1f}%"] if gap_pct is not None and gap_pct <= 0
-                    else [f"还需跌 {gap_pct:.1f}%"] if gap_pct is not None
-                    else [])
-                    + ([f"位置 {yr_position:.0f}%"] if yr_position is not None
-                       and yr_position >= 80 else [])),
+                # 标签用盈亏比口径。原来用的是 MA120 的 buy/hold——
+                # 那是「价格低于半年线」的意思，和位置分（越高越好）方向相反，
+                # 会出现「评分 0 分却标 buy」这种自相矛盾的展示。
+                badges=([_rr_label(rr)]
+                        + ([f"低于买点 {abs(gap_pct):.1f}%"] if gap_pct is not None and gap_pct <= 0
+                           else [f"还需跌 {gap_pct:.1f}%"] if gap_pct is not None
+                           else [])),
             ))
 
         # 排序按「确定的事实」，不按预测。
