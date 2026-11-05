@@ -304,6 +304,7 @@ class BankModule(BaseModule):
             #   买入价      = 基准价 + 即将派发的分红（除权前买能拿到这笔）
             vcfg = val_cfg.get(code.split(".")[0]) or {}
             dps_year = dividends_by_code.get(code)
+            dv_annual = None
             base_price = buy_price = pe_price = div_price = None
             gap_pct = None
             if vcfg and dps_year:
@@ -335,6 +336,12 @@ class BankModule(BaseModule):
                                                     cfg["sell_ratio"])
                         if buy_price and price:
                             gap_pct = (price / buy_price - 1) * 100
+                        # 年度股息率 = 最近完整财年的每股分红 ÷ 现价。
+                        # dv_ttm 是「过去 12 个月实际派的钱」，遇到首次改
+                        # 半年派的公司会把 18 个月的分配塞进 12 个月，虚高。
+                        # 成都银行 2026 年首次派中期：TTM 7.1%、年度 4.6%。
+                        if dps_year and price and price > 0:
+                            dv_annual = dps_year / price * 100.0
                         # 位置指标：双估值只回答「相对目标价贵不贵」，
                         # 不回答「相对自己这一年的走势在哪」。护盘行情里
                         # 银行能从低位涨 20%，双估值仍然是「买点」——
@@ -372,11 +379,13 @@ class BankModule(BaseModule):
                 # score 字段用于表格展示，这里放排序键（股息率），
                 # 不放综合分——综合分既不参与排序，又和标签口径不一致，
                 # 展示出来只会让人困惑（出现过「0 分却标 buy」）。
-                score=float(dv),
+                # score 是表格里的「股息率」列，用财年口径
+                score=float(dv_annual) if dv_annual else float(dv),
                 industry=str(meta.loc[code].get("industry", "")),
                 metrics={
                     "pe": round(float(pe), 2),
                     "dv": round(float(dv), 2),
+                    "dv_annual": round(dv_annual, 2) if dv_annual else None,
                     "roe": round(roe * 100, 1),
                     "dividend_years": streak,
                     "payout": round(payout * 100, 1) if payout else None,
@@ -409,7 +418,9 @@ class BankModule(BaseModule):
                 # 会出现「评分 0 分却标 buy」这种自相矛盾的展示。
                 # 标签直接给数字，不用「上行空间小」这种还要解释的说法：
                 # ↑x% 是涨到近一年高点能赚多少，↓y% 是跌到半年线会亏多少。
-                badges=(([f"↑{up_pct:.1f}% ↓{down_pct:.1f}%"]
+                badges=(([f"年度股息 {dv_annual:.1f}%"]
+                         if dv_annual and abs(float(dv) - dv_annual) > 1.5 else [])
+                        + ([f"↑{up_pct:.1f}% ↓{down_pct:.1f}%"]
                          if up_pct is not None and down_pct is not None else [])
                         + ([f"低于买点 {abs(gap_pct):.1f}%"] if gap_pct is not None and gap_pct <= 0
                            else [f"还需跌 {gap_pct:.1f}%"] if gap_pct is not None
@@ -422,8 +433,11 @@ class BankModule(BaseModule):
         # 之间乱跳，被市场环境主导。IC 0.104 看着显著，实际不可交易。
         # 所以排序改成股息率（确定的现金流）优先，ROE 次之。
         # 盈亏比仍然展示，但只作参考。
+        # 按「最近完整财年的股息率」排序，不用 TTM。
+        # TTM 会把首次改半年派的公司算高（成都银行 +2.6pp），
+        # 而这恰好让它们排到前面——用错口径等于系统性地推荐虚高的标的。
         rows.sort(key=lambda r: (
-            -(r.metrics.get("dv") or 0),
+            -(r.metrics.get("dv_annual") or r.metrics.get("dv") or 0),
             -(r.metrics.get("roe") or 0),
         ))
         cap = int(cfg.get("max_candidates", 20))
