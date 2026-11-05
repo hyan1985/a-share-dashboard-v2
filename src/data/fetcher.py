@@ -217,13 +217,17 @@ def fetch_cashflow_income(client, store: ParquetStore, trade_date_compact: str,
     # 全市场有 1500 多只拉不到。这里对缺失的代码逐只补，限一个批次，
     # 剩下的留给下次运行——分红缓存那套「按需补」的思路。
     try:
-        meta = store.read_single("stock_basic")
-        all_codes = set(meta["ts_code"]) if "ts_code" in meta.columns else set()
+        # 用当日 daily_basic 拿全市场代码——这张表一定有数据（模块依赖它），
+        # 比 stock_basic 可靠，也不会因为读法差异返回空。
+        snap = store.read_dated("daily_basic", [trade_date_compact])
+        all_codes = set(snap["ts_code"]) if not snap.empty else set()
         cf = store.read_dated("cashflow", [periods[-1]]) if periods else None
         have = set(cf["ts_code"]) if cf is not None and not cf.empty else set()
         missing = sorted(all_codes - have)[:FILL_BATCH]
-        if missing and verbose:
-            print(f"  → 收现比补缺：{len(missing)} 只（本轮上限 {FILL_BATCH}）")
+        if verbose:
+            print(f"  → 收现比补缺：全市场 {len(all_codes)}，已有 {len(have)}，"
+                  f"本轮补 {len(missing)}（上限 {FILL_BATCH}）")
+        filled = 0
         for code in missing:
             try:
                 df = client.query("cashflow", ts_code=code,
@@ -233,9 +237,15 @@ def fetch_cashflow_income(client, store: ParquetStore, trade_date_compact: str,
             if df is None or df.empty:
                 continue
             store.write_dated("cashflow_extra", code, df)
-            out["filled"] = out.get("filled", 0) + 1
-    except Exception:
-        pass
+            filled += 1
+        out["filled"] = filled
+        if verbose and filled:
+            print(f"    逐只补到 {filled} 只")
+    except Exception as exc:  # noqa: BLE001
+        # 不要静默吞掉——上一版就是这样，跑完了日志里什么都没有，
+        # 分不清是「没有缺失」还是「代码没执行」。
+        if verbose:
+            print(f"    ✗ 收现比补缺失败：{exc}")
     return out
 
 
