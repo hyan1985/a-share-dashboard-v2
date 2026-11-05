@@ -183,7 +183,7 @@ def _render_levels(levels: dict, close=None) -> str:
     items = [
         ("突破位", levels.get("breakout"), "resist"),
         ("承接位", levels.get("support"), "support"),
-        ("破位位", levels.get("breakdown"), "break"),
+        ("破位", levels.get("breakdown"), "break"),
     ]
     cells = []
     for name, item, cls in items:
