@@ -3,7 +3,7 @@ name: 每日更新看板
 on:
   schedule:
     # 18:30 北京时间（UTC 10:30），收盘后数据基本已入库
-    - cron: "30 10 * * 1-5"
+    - cron: "30 13 * * 1-5"
   workflow_dispatch:
 
 permissions:
