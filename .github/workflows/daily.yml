@@ -12,7 +12,9 @@ permissions:
   id-token: write
 
 concurrency:
-  group: pages
+  # 组名带版本号：有一次运行卡在 queued 状态后，占着 pages 组不释放，
+  # 之后所有调度都排在它后面永远不动。换组名可以立刻绕过这种僵尸锁。
+  group: pages-daily-v2
   cancel-in-progress: false
 
 jobs:
