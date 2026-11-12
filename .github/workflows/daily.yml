@@ -3,7 +3,7 @@ name: 每日更新看板
 on:
   schedule:
     # 21:30 北京时间（UTC 13:30）。18:30 太早，tushare 当天日线还没清洗完
-    - cron: "30 13 * * 1-5"
+    - cron: "30 16 * * 0-4"
   workflow_dispatch:
 
 permissions:
