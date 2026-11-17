@@ -10,6 +10,7 @@ from __future__ import annotations
 import os
 
 import time
+from datetime import datetime, timedelta
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Sequence, Tuple
 
@@ -368,6 +369,17 @@ def resolve_target(store: ParquetStore, target: Optional[str]) -> str:
     resolved = calendar.latest_open_date(store, on_or_before=calendar.today_compact())
     if not resolved:
         raise ValueError("trade_cal 为空，请先执行 fetch")
+
+    # 解析到「今天」时，还要看现在几点：北京 16:00 之前当天的日线根本不存在。
+    # GitHub 的 schedule 实测会延迟 5~8 小时，原本想在北京次日 00:30 跑，
+    # 实际落到早上 8 点，开盘前——拉当天数据必然失败，面板整页 stale。
+    # 所以只要还没收盘，一律退回到上一个开市日，让延迟多久都不空跑。
+    now_bj = datetime.utcnow() + timedelta(hours=8)
+    if resolved == now_bj.strftime("%Y%m%d") and now_bj.hour < 16:
+        prev = calendar.latest_open_date(
+            store, on_or_before=(now_bj - timedelta(days=1)).strftime("%Y%m%d"))
+        if prev:
+            return prev
     return resolved
 
 
