@@ -515,3 +515,19 @@ table th.num{text-align:right}
 table td.num,table th.num{font-variant-numeric:tabular-nums}
 /* 行业短，居中更好扫 */
 td.ind,th.ind{text-align:center;white-space:nowrap}
+
+
+/* 破净表格改成固定布局，按百分比精确分配列宽。
+   自动布局下 width:1% 只是个建议，剩下的空间会被平均摊给每列，
+   结果 PB 这种只有 4 个字符的列也占了一大块。 */
+#subbook-table table{table-layout:fixed;width:100%}
+#subbook-table th:nth-child(1),#subbook-table td:nth-child(1){width:16%}  /* 标的 */
+#subbook-table th:nth-child(2),#subbook-table td:nth-child(2){width:9%}   /* 行业 */
+#subbook-table th:nth-child(3),#subbook-table td:nth-child(3){width:7%}   /* PB */
+#subbook-table th:nth-child(4),#subbook-table td:nth-child(4){width:8%}   /* ROE */
+#subbook-table th:nth-child(5),#subbook-table td:nth-child(5){width:9%}   /* 股息率 */
+#subbook-table th:nth-child(6),#subbook-table td:nth-child(6){width:9%}   /* 分红年数 */
+#subbook-table th:nth-child(7),#subbook-table td:nth-child(7){width:42%}  /* 说明 */
+#subbook-table table th{padding:9px 8px;font-size:11px}
+#subbook-table table td{padding:8px 8px;font-size:13px}
+#subbook-table .col-wide{width:auto;min-width:0}
