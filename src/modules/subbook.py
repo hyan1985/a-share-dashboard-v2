@@ -34,6 +34,30 @@ DEFAULTS = {
 # ST / 退市风险的不参与
 BAD_NAME = ("ST", "退", "*")
 
+# 周期行业：破净高度集中在这里是正常的，不是筛出错了。
+CYCLICAL_INDUSTRIES = ("普钢", "特钢", "水泥", "玻璃", "煤炭", "焦炭", "有色",
+                       "化工", "建材", "建筑工程", "房地产开发", "航运", "港口")
+
+
+def _risks(roe, dv, industry):
+    """把容易误读的地方直接标在候选上。
+
+    这个专区最容易踩的三个误读：
+      1. 破净 = 便宜          → 净资产可能虚高或会减值
+      2. ROE 越高越好         → 超高 ROE 往往只是净资产被侵蚀得很小
+      3. 怎么全是周期行业     → 破净本来就集中在周期底，不是筛选出错
+    """
+    out = []
+    if roe is not None and roe >= 0.5:
+        out.append(f"ROE {roe*100:.0f}% 异常高，多半是净资产很小，不代表质地更好")
+    if not dv:
+        out.append("股息率 0，不派现")
+    if roe is not None and 0 < roe < 0.08:
+        out.append("ROE 低于 8%，净资产回报偏弱")
+    if any(k in str(industry or "") for k in CYCLICAL_INDUSTRIES):
+        out.append("周期行业：破净集中在周期底是常态，不代表被错杀")
+    return out
+
 
 class SubBookModule(BaseModule):
     id = "subbook"
@@ -121,8 +145,7 @@ class SubBookModule(BaseModule):
                 },
                 reasons=[f"PB {pb:.2f}", f"ROE {roe*100:.1f}%",
                          f"连续分红 {streak} 年" if streak else "分红记录缺失"],
-                risks=([] if dv else ["股息率 0，不派现"]) +
-                      (["ROE 低于 8%，净资产回报偏弱"] if roe < 0.08 else []),
+                risks=_risks(roe, dv, info.get("industry")),
                 badges=(["白马破净"] if white else []),
             ))
 
