@@ -461,6 +461,26 @@ def _render_amount(ctx: dict) -> str:
 
 
 # ---------------- 选股分区 ----------------
+
+def _yield_cell(cand) -> str:
+    """股息率列：优先财年口径，退回 TTM。
+
+    原来这里直接渲染 cand.score，但 score 各模块语义不同
+    （红利模块是「偏离年线」的分数、银行模块是财年股息率），
+    表头统一写「股息率」之后，红利模块会显示成 27.2 这种和股息率无关的数。
+    """
+    m = cand.metrics or {}
+    v = m.get("dv_annual")
+    if v is None:
+        v = m.get("dv")
+    if v is None:
+        return "-"
+    try:
+        return f"{float(v):.2f}%"
+    except (TypeError, ValueError):
+        return "-"
+
+
 def _render_screener(r: ModuleResult) -> str:
     caution = (r.context or {}).get("caution") or ""
     caution_html = f'<div class="caution">⚠ {_e(caution)}</div>' if caution else ""
@@ -491,7 +511,7 @@ def _render_screener(r: ModuleResult) -> str:
         rows.append(f"""
       <tr>
         <td><div>{_e(cand.name) or "-"}</div><div class="code">{_e(cand.code)}</div></td>
-        <td class="score">{cand.score:.1f}</td>
+        <td class="score">{_yield_cell(cand)}</td>
         <td>{badges}<div class="reason">{metrics}</div></td>
         <td><div class="reason">{reasons}</div>{f'<div class="risk">{risks}</div>' if risks else ''}</td>
       </tr>""")
