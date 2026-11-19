@@ -547,6 +547,16 @@ def _industry_filter(r) -> str:
   </script>"""
 
 
+
+def _screener_head(module_id: str) -> str:
+    """表头按分区给不同的列。破净专区指标多，拆成独立列更好读。"""
+    if module_id == "subbook":
+        return ('<tr><th>标的</th><th>行业</th><th>PB</th><th>ROE</th>'
+                '<th>股息率</th><th>分红年数</th><th>说明</th></tr>')
+    return ('<tr><th>标的</th><th>行业</th><th>股息率</th>'
+            '<th>关键指标</th><th>理由 / 风险</th></tr>')
+
+
 def _render_screener(r: ModuleResult) -> str:
     caution = (r.context or {}).get("caution") or ""
     caution_html = f'<div class="caution">⚠ {_e(caution)}</div>' if caution else ""
@@ -571,16 +581,32 @@ def _render_screener(r: ModuleResult) -> str:
             f'<span class="badge {"horse" if b in ("白马",) else ""}">{_e(b)}</span>'
             for b in cand.badges
         )
-        metrics = " · ".join(f"{_e(k)} {_e(v)}" for k, v in list(cand.metrics.items())[:3])
         reasons = "<br>".join(_e(x) for x in cand.reasons[:2])
-        risks = "；".join(_e(x) for x in cand.risks[:2])
-        rows.append(f"""
+        risks = "<br>".join(_e(x) for x in cand.risks[:2])
+        if r.id == "subbook":
+            # 破净专区：指标拆成独立窄列，说明列吃剩余宽度。
+            # 原来把 pb/roe/股息率 挤在「关键指标」一格、说明又很长，
+            # 结果左边几列大片留白、右边一列挤成墙。
+            m = cand.metrics
+            rows.append(f"""
       <tr data-ind="{_e(cand.industry) or '-'}">
-        <td><div>{_e(cand.name) or "-"}</div><div class="code">{_e(cand.code)}</div></td>
+        <td class="col-name"><div>{_e(cand.name) or "-"}</div><div class="code">{_e(cand.code)}</div></td>
+        <td class="ind">{_e(cand.industry) or "-"}</td>
+        <td class="num">{m.get('pb') if m.get('pb') is not None else '-'}</td>
+        <td class="num">{str(m.get('roe'))+'%' if m.get('roe') is not None else '-'}</td>
+        <td class="num">{str(m.get('dv'))+'%' if m.get('dv') is not None else '-'}</td>
+        <td class="num">{m.get('dividend_years') or '-'}</td>
+        <td class="col-wide">{badges}<div class="reason">{reasons}</div>{f'<div class="risk">{risks}</div>' if risks else ''}</td>
+      </tr>""")
+        else:
+            metrics = " · ".join(f"{_e(k)} {_e(v)}" for k, v in list(cand.metrics.items())[:3])
+            rows.append(f"""
+      <tr>
+        <td class="col-name"><div>{_e(cand.name) or "-"}</div><div class="code">{_e(cand.code)}</div></td>
         <td class="ind">{_e(cand.industry) or "-"}</td>
         <td class="score">{_yield_cell(cand)}</td>
         <td>{badges}<div class="reason">{metrics}</div></td>
-        <td><div class="reason">{reasons}</div>{f'<div class="risk">{risks}</div>' if risks else ''}</td>
+        <td class="col-wide"><div class="reason">{reasons}</div>{f'<div class="risk">{risks}</div>' if risks else ''}</td>
       </tr>""")
 
     # 未通过门槛的也列出来，附原因。否则「为什么建行不在名单里」
@@ -609,7 +635,7 @@ def _render_screener(r: ModuleResult) -> str:
   {_industry_filter(r)}
   <div class="table-wrap{" scrollable" if r.id == "subbook" else ""}"{' id="subbook-table"' if r.id == "subbook" else ""}>
     <table>
-      <thead><tr><th>标的</th><th>行业</th><th>股息率</th><th>关键指标</th><th>理由 / 风险</th></tr></thead>
+      <thead>{_screener_head(r.id)}</thead>
       <tbody>{''.join(rows)}</tbody>
     </table>
   </div>
