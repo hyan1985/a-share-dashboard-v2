@@ -88,7 +88,8 @@ class SubBookModule(BaseModule):
             div_tbl = None
 
         rows: List[Candidate] = []
-        stats = {"total": 0, "broken": 0, "profitable": 0, "white": 0}
+        stats = {"total": 0, "broken": 0, "profitable": 0, "white": 0,
+                 "bank_excluded": 0}
 
         for _, s in snap.iterrows():
             code = s["ts_code"]
@@ -101,6 +102,10 @@ class SubBookModule(BaseModule):
             info = meta.loc[code]
             name = str(info.get("name", ""))
             if any(t in name for t in BAD_NAME):
+                continue
+            # 银行单独有专区，这里排除，避免同一批公司在两个分区重复出现
+            if "银行" in str(info.get("industry", "")):
+                stats["bank_excluded"] += 1
                 continue
             stats["broken"] += 1
 
@@ -151,13 +156,16 @@ class SubBookModule(BaseModule):
 
         # 白马在前，其次 PB 从低到高
         rows.sort(key=lambda r: (0 if r.badges else 1, r.score))
-        cap = int(cfg.get("max_candidates", 40))
+        # 全部列出，不截断。原来默认 40 只，用户看不到剩下的。
+        cap = int(cfg.get("max_candidates", 800))
         rows = rows[:cap]
 
         return {
             "status": STATUS_OK,
-            "summary": (f"{ctx.trade_date} · 破净 {stats['broken']} 只，"
-                        f"其中盈利 {stats['profitable']} 只，白马破净 {stats['white']} 只"),
+            "summary": (f"{ctx.trade_date} · 破净 {stats['broken']} 只"
+                        f"（已排除银行 {stats['bank_excluded']} 只）· "
+                        f"其中盈利 {stats['profitable']} 只，"
+                        f"白马破净 {stats['white']} 只"),
             "candidates": rows,
             "context": {"thresholds": cfg, "funnel": stats},
         }
