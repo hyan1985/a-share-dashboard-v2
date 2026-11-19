@@ -481,6 +481,29 @@ def _yield_cell(cand) -> str:
         return "-"
 
 
+
+_LEGENDS = {
+    "dividend": ('<b>股息率</b> 按最近一个完整财年（年度+中期）算 ÷ 现价，'
+                 '不用 TTM——TTM 遇到首次改半年派的公司会虚高'
+                 '（成都银行 TTM 7.4%、财年 4.8%）。'
+                 ' · <b>↑↓</b> 涨到近一年高点能赚多少 / 跌到半年线会亏多少'
+                 ' · <b>低于买点</b> 现价相对双估值买点。'),
+    "bank": ('<b>股息率</b> 按最近一个完整财年（年度+中期）算 ÷ 现价。'
+             ' · <b>↑↓</b> 涨到近一年高点能赚多少 / 跌到半年线会亏多少'
+             ' · <b>低于买点</b> 现价相对双估值买点。'),
+    "subbook": ('<b>PB &lt; 1</b> 就是股价低于每股净资产。'
+                '<b>破净 ≠ 便宜</b>——净资产可能虚高或面临减值，'
+                '所以这里已排除亏损股（ROE ≤ 0），并标出白马。'
+                ' · <b>白马破净</b> = ROE ≥ 12% + 连续分红 ≥ 5 年 + 股息率 ≥ 2%，'
+                '长期在赚钱的公司净资产更可信。'
+                ' · <b>ROE 超过 50%</b> 通常只是净资产很小，不代表质地更好。'),
+}
+
+
+def _legend(module_id: str) -> str:
+    return _LEGENDS.get(module_id, "")
+
+
 def _render_screener(r: ModuleResult) -> str:
     caution = (r.context or {}).get("caution") or ""
     caution_html = f'<div class="caution">⚠ {_e(caution)}</div>' if caution else ""
@@ -538,10 +561,7 @@ def _render_screener(r: ModuleResult) -> str:
     return f"""
 <div class="card">
   {head}
-  <p class="legend"><b>股息率</b> 按最近一个完整财年（年度+中期）算 ÷ 现价，
-    不用 TTM——TTM 遇到首次改半年派的公司会虚高（成都银行 TTM 7.4%、财年 4.8%）。
-    · <b>↑↓</b> 涨到近一年高点能赚多少 / 跌到半年线会亏多少
-    · <b>低于买点</b> 现价相对双估值买点。</p>
+  <p class="legend">{_legend(r.id)}</p>
   <div class="table-wrap">
     <table>
       <thead><tr><th>标的</th><th>股息率</th><th>关键指标</th><th>理由 / 风险</th></tr></thead>
