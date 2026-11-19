@@ -505,3 +505,13 @@ table{table-layout:auto}
 .num{white-space:nowrap;text-align:right;font-variant-numeric:tabular-nums;width:1%}
 .col-wide{width:60%;min-width:260px;line-height:1.6}
 #subbook-table .col-wide{width:55%}
+
+
+/* 单元格默认顶部对齐时，说明列一长，同一行左边的名字和数字都浮在顶上，
+   看起来永远对不齐。改成垂直居中；数字列的标题也跟着右对齐，
+   表头和数值才不会错位。 */
+table td{vertical-align:middle}
+table th.num{text-align:right}
+table td.num,table th.num{font-variant-numeric:tabular-nums}
+/* 行业短，居中更好扫 */
+td.ind,th.ind{text-align:center;white-space:nowrap}
