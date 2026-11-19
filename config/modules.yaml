@@ -34,4 +34,4 @@ modules:
     order: 30
     expanded: true
     params:
-      max_candidates: 40
+      max_candidates: 800
