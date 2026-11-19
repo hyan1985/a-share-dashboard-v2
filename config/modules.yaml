@@ -26,3 +26,12 @@ modules:
     expanded: true
     params:
       max_candidates: 15
+
+  - id: subbook
+    title: 破净专区
+    kind: screener
+    enabled: true
+    order: 30
+    expanded: true
+    params:
+      max_candidates: 40
