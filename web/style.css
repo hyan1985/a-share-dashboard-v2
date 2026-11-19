@@ -496,3 +496,12 @@ table th, table td { padding: 9px 12px; line-height: 1.6; }
 }
 .excluded summary:hover { color: var(--fg); }
 .excluded table { margin-top: 8px; font-size: 12.5px; }
+
+
+/* 筛选表的列宽规划：数字列固定窄、说明列吃剩余宽度。
+   原来左边几列大片留白、右边「理由/风险」挤成一堵墙，很难读。 */
+table{table-layout:auto}
+.col-name{white-space:nowrap;min-width:120px}
+.num{white-space:nowrap;text-align:right;font-variant-numeric:tabular-nums;width:1%}
+.col-wide{width:60%;min-width:260px;line-height:1.6}
+#subbook-table .col-wide{width:55%}
