@@ -504,6 +504,49 @@ def _legend(module_id: str) -> str:
     return _LEGENDS.get(module_id, "")
 
 
+
+def _industry_filter(r) -> str:
+    """破净专区的行业下拉筛选。
+
+    几百行直接铺开根本扫不动，按行业收窄之后才能看出「这个行业整体
+    破净到什么程度」——那才是这个分区想问的问题。
+    纯前端过滤，不重新请求。
+    """
+    if r.id != "subbook" or not r.candidates:
+        return ""
+    from collections import Counter
+    counts = Counter(c.industry or "-" for c in r.candidates)
+    opts = "".join(
+        f'<option value="{_e(k)}">{_e(k)}（{v}）</option>'
+        for k, v in sorted(counts.items(), key=lambda x: (-x[1], x[0]))
+    )
+    total = len(r.candidates)
+    return f"""
+  <div class="ind-filter">
+    <label>按行业筛选</label>
+    <select id="subbook-ind" onchange="filterSubbook()">
+      <option value="">全部（{total}）</option>
+      {opts}
+    </select>
+    <span class="ind-count" id="subbook-count">共 {total} 只</span>
+  </div>
+  <script>
+  function filterSubbook() {{
+    var sel = document.getElementById('subbook-ind');
+    var v = sel ? sel.value : '';
+    var rows = document.querySelectorAll('#subbook-table tbody tr');
+    var n = 0;
+    rows.forEach(function (tr) {{
+      var ok = !v || tr.getAttribute('data-ind') === v;
+      tr.style.display = ok ? '' : 'none';
+      if (ok) n++;
+    }});
+    var c = document.getElementById('subbook-count');
+    if (c) c.textContent = '共 ' + n + ' 只';
+  }}
+  </script>"""
+
+
 def _render_screener(r: ModuleResult) -> str:
     caution = (r.context or {}).get("caution") or ""
     caution_html = f'<div class="caution">⚠ {_e(caution)}</div>' if caution else ""
@@ -532,7 +575,7 @@ def _render_screener(r: ModuleResult) -> str:
         reasons = "<br>".join(_e(x) for x in cand.reasons[:2])
         risks = "；".join(_e(x) for x in cand.risks[:2])
         rows.append(f"""
-      <tr>
+      <tr data-ind="{_e(cand.industry) or '-'}">
         <td><div>{_e(cand.name) or "-"}</div><div class="code">{_e(cand.code)}</div></td>
         <td class="ind">{_e(cand.industry) or "-"}</td>
         <td class="score">{_yield_cell(cand)}</td>
@@ -563,7 +606,8 @@ def _render_screener(r: ModuleResult) -> str:
 <div class="card">
   {head}
   <p class="legend">{_legend(r.id)}</p>
-  <div class="table-wrap{" scrollable" if r.id == "subbook" else ""}">
+  {_industry_filter(r)}
+  <div class="table-wrap{" scrollable" if r.id == "subbook" else ""}"{' id="subbook-table"' if r.id == "subbook" else ""}>
     <table>
       <thead><tr><th>标的</th><th>行业</th><th>股息率</th><th>关键指标</th><th>理由 / 风险</th></tr></thead>
       <tbody>{''.join(rows)}</tbody>
