@@ -147,6 +147,22 @@ main{max-width:1180px;margin:0 auto;padding:20px}
 .table-wrap.scrollable thead th{position:sticky;top:0;z-index:2;background:var(--bg2)}
 /* 行业列窄一点，别抢了标的和指标的位置 */
 td.ind{font-size:12.5px;color:var(--muted);white-space:nowrap}
+
+/* 破净专区：几百行要能扫得动，行压缩 + 斑马纹 */
+#subbook-table table td{padding:7px 10px}
+#subbook-table table tbody tr:nth-child(even){background:rgba(255,255,255,.018)}
+#subbook-table table tbody tr:hover{background:rgba(255,255,255,.045)}
+
+/* 行业下拉筛选 */
+.ind-filter{display:flex;align-items:center;gap:10px;margin:-2px 0 12px;flex-wrap:wrap}
+.ind-filter label{font-size:12.5px;color:var(--muted)}
+.ind-filter select{
+  padding:7px 12px;border-radius:8px;font-size:13px;
+  background:var(--bg2);color:var(--fg);border:1px solid var(--line);
+  min-width:200px;cursor:pointer;
+}
+.ind-filter select:focus{outline:none;border-color:var(--good)}
+.ind-count{font-size:12.5px;color:var(--muted);font-variant-numeric:tabular-nums}
 table{width:100%;border-collapse:collapse;font-size:13px}
 th:nth-child(1),td:nth-child(1){width:17%}
 th:nth-child(2),td:nth-child(2){width:8%}
