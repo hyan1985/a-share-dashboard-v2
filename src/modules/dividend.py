@@ -257,6 +257,7 @@ class DividendModule(BaseModule):
             # 分红：连续年数与派息率
             streak = 0
             payout = None
+            dps_latest = None
             if div_tbl is not None and not div_tbl.empty:
                 sub = div_tbl[div_tbl.ts_code == code]
                 if not sub.empty:
@@ -291,6 +292,11 @@ class DividendModule(BaseModule):
             if ma <= 0:
                 continue
             ratio = price_adj / ma
+
+            # 财年股息率 = 最近完整财年的每股分红 ÷ 现价。
+            # 和银行模块同一口径：不用 TTM（首次改半年派的公司会虚高）。
+            dv_annual = (float(dps_latest) / price * 100.0
+                         if dps_latest and price and price > 0 else None)
 
             # 价格不到半年线一半，多半是复权或上市初期的数据问题，不是"便宜"
             if ratio < 0.5:
@@ -329,6 +335,7 @@ class DividendModule(BaseModule):
                     "debt": round(debt * 100, 1) if debt else None,
                     "cash_ratio": round(cr, 2) if cr else None,
                     "payout": round(payout * 100, 1) if payout else None,
+                    "dv_annual": round(dv_annual, 2) if dv_annual else None,
                     "dividend_years": streak,
                     "roe_streak": roe_streak,
                     "is_financial": bool(is_fin),
