@@ -534,6 +534,7 @@ def _render_screener(r: ModuleResult) -> str:
         rows.append(f"""
       <tr>
         <td><div>{_e(cand.name) or "-"}</div><div class="code">{_e(cand.code)}</div></td>
+        <td class="ind">{_e(cand.industry) or "-"}</td>
         <td class="score">{_yield_cell(cand)}</td>
         <td>{badges}<div class="reason">{metrics}</div></td>
         <td><div class="reason">{reasons}</div>{f'<div class="risk">{risks}</div>' if risks else ''}</td>
@@ -562,9 +563,9 @@ def _render_screener(r: ModuleResult) -> str:
 <div class="card">
   {head}
   <p class="legend">{_legend(r.id)}</p>
-  <div class="table-wrap">
+  <div class="table-wrap{" scrollable" if r.id == "subbook" else ""}">
     <table>
-      <thead><tr><th>标的</th><th>股息率</th><th>关键指标</th><th>理由 / 风险</th></tr></thead>
+      <thead><tr><th>标的</th><th>行业</th><th>股息率</th><th>关键指标</th><th>理由 / 风险</th></tr></thead>
       <tbody>{''.join(rows)}</tbody>
     </table>
   </div>
