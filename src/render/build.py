@@ -551,8 +551,9 @@ def _industry_filter(r) -> str:
 def _screener_head(module_id: str) -> str:
     """表头按分区给不同的列。破净专区指标多，拆成独立列更好读。"""
     if module_id == "subbook":
-        return ('<tr><th>标的</th><th>行业</th><th>PB</th><th>ROE</th>'
-                '<th>股息率</th><th>分红年数</th><th>说明</th></tr>')
+        return ('<tr><th>标的</th><th>行业</th><th class="num">PB</th>'
+                '<th class="num">ROE</th><th class="num">股息率</th>'
+                '<th class="num">分红年数</th><th>说明</th></tr>')
     return ('<tr><th>标的</th><th>行业</th><th>股息率</th>'
             '<th>关键指标</th><th>理由 / 风险</th></tr>')
 
