@@ -1,6 +1,6 @@
 {
   "trade_date": "2026-11-20",
-  "generated_at": "2026-11-22 12:42",
+  "generated_at": "2026-11-22 20:31",
   "modules": [
     {
       "id": "overview",
@@ -224,7 +224,7 @@
         }
       },
       "error": "",
-      "elapsed_ms": 1022,
+      "elapsed_ms": 1076,
       "expanded": true
     },
     {
@@ -626,7 +626,7 @@
         "cash_ratio_available": true
       },
       "error": "",
-      "elapsed_ms": 5208,
+      "elapsed_ms": 5427,
       "expanded": true
     },
     {
@@ -1510,7 +1510,7 @@
         ]
       },
       "error": "",
-      "elapsed_ms": 3938,
+      "elapsed_ms": 3936,
       "expanded": true
     },
     {
@@ -11312,7 +11312,7 @@
         }
       },
       "error": "",
-      "elapsed_ms": 5817,
+      "elapsed_ms": 5757,
       "expanded": true
     }
   ]
